@@ -1,4 +1,4 @@
-# astrobee
+# Astrobee
 		 	 	 		
 			
 				
@@ -20,10 +20,8 @@ Ubuntu16.04(64-bitversion)(http://releases.ubuntu.com/16.04/)
 					
 ### Setting up the Astrobee Robot Software
 					
-Clone code from GitHub ( https://github.com/nasa/astrobee ) and install Astrobee Robot Software according to the installation manual.
-( https://github.com/nasa/astrobee/blob/70e3df03ff3f880d302812111d0107f3c14dccc0/INS TALL.md )
 					
-NOTE: Since the web simulator is running Astrobee Robot Software v0.10.2 and Android submodule v0.8.0, so please execute the following command after clone the android software repository.
+Run the follwing script in the Ubuntu terminal
 								
 ```
 #!/bin/bash
