@@ -98,20 +98,33 @@ python gds_simulator.py
 
 ### Starting it:
 a.	Press any key to grab control
+
 b.	Select the Guest Science Application (GSA) you are trying to run
+
 c.	Type b and press Enter to start the GSA
+
 d.	Press Enter to stop listening for data
+
 e.	Press any key to get back to the application menu
 
 ### Running simple trajectory:
 a.	Type d and press Enter to send a custom guest science command
+
 b.	Type 1 and press Enter to run the trajectory
-3.	To stop application:
+
+### To stop application:
+
 a.	If needed, press Enter to stop listening for data
+
 b.	If needed, press any key to get back to the application menu
+
 c.	Type c and press Enter to stop the GSA
+
 d.	Press Enter to stop listening for data
+
 e.	Press any key to get back to the application menu
+
 f.	Type f and press Enter to exit the GDS simulator
+
 g.	In the terminal running the simulator, enter Ctrl+c
 
