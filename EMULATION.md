@@ -75,25 +75,25 @@ echo $ROS_IP
 
 ## In Terminal 2 Launch simulation:
 
-### 1. Building/Installing guest science manager:
+ - ### 1. Building/Installing guest science manager:
 
 ```
-cd $ANDROID_PATH/core_apks/guest_science_manager
-ANDROID_HOME=$HOME/Android/Sdk ./gradlew assembleDebug
-adb install -gr activity/build/outputs/apk/activity-debug.apk
+    cd $ANDROID_PATH/core_apks/guest_science_manager
+    ANDROID_HOME=$HOME/Android/Sdk ./gradlew assembleDebug
+    adb install -gr activity/build/outputs/apk/activity-debug.apk
 
 ```
 
-### 2. Building/Installing simple trajectory:
+ - ### 2. Building/Installing simple trajectory:
 
 ```
-cd $ANDROID_PATH/gs_examples/test_simple_trajectory
-ANDROID_HOME=$HOME/Android/Sdk ./gradlew assembleDebug
-adb install -gr app/build/outputs/apk/app-debug.apk
+      cd $ANDROID_PATH/gs_examples/test_simple_trajectory
+      ANDROID_HOME=$HOME/Android/Sdk ./gradlew assembleDebug
+      adb install -gr app/build/outputs/apk/app-debug.apk
 
-/$ANDROID_PATH/scripts/gs_manager.sh start
-cd $SOURCE_PATH/tools/gds_helper/
-python gds_simulator.py
+    /$ANDROID_PATH/scripts/gs_manager.sh start
+    cd $SOURCE_PATH/tools/gds_helper/
+    python gds_simulator.py
 
 ```
 ## Operating Guest Science Manager:
