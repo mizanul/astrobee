@@ -11,7 +11,7 @@ popd
 ```
 roslaunch astrobee sim.launch dds:=false robot:=sim_pub rviz:=true
 
-``
+```
 
 ### Running world only:
 
@@ -95,13 +95,15 @@ python gds_simulator.py
 
 ```
 ## Operating Guest Science Manager:
-1.	Starting it:
+
+### Starting it:
 a.	Press any key to grab control
 b.	Select the Guest Science Application (GSA) you are trying to run
 c.	Type b and press Enter to start the GSA
 d.	Press Enter to stop listening for data
 e.	Press any key to get back to the application menu
-2.	Running simple trajectory:
+
+### Running simple trajectory:
 a.	Type d and press Enter to send a custom guest science command
 b.	Type 1 and press Enter to run the trajectory
 3.	To stop application:
@@ -113,5 +115,3 @@ e.	Press any key to get back to the application menu
 f.	Type f and press Enter to exit the GDS simulator
 g.	In the terminal running the simulator, enter Ctrl+c
 
-
-![image](https://user-images.githubusercontent.com/3433161/152619956-4c7b4a06-6648-453d-9ed9-32a0a3677ae3.png)
