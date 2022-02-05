@@ -73,7 +73,7 @@ echo $ROS_IP
 
 ```
 
-## In Terminal 2 Launch simulation:
+### In Terminal 2 Launch simulation:
 
  - ### Building/Installing guest science manager:
 
@@ -100,24 +100,24 @@ echo $ROS_IP
 
 ### Starting it:
 
-- Press any key to grab control
-- Select the Guest Science Application (GSA) you are trying to run
-- Type b and press Enter to start the GSA
-- Press Enter to stop listening for data
-- Press any key to get back to the application menu
+   - Press any key to grab control
+   - Select the Guest Science Application (GSA) you are trying to run
+   - Type b and press Enter to start the GSA
+   - Press Enter to stop listening for data
+   - Press any key to get back to the application menu
 
 ### Running simple trajectory:
 
-- Type d and press Enter to send a custom guest science command
-- Type 1 and press Enter to run the trajectory
+   - Type d and press Enter to send a custom guest science command
+   - Type 1 and press Enter to run the trajectory
 
 ### To stop application:
 
-- If needed, press Enter to stop listening for data
-- If needed, press any key to get back to the application menu
-- Type c and press Enter to stop the GSA
-- Press Enter to stop listening for data
-- Press any key to get back to the application menu
-- Type f and press Enter to exit the GDS simulator
-- In the terminal running the simulator, enter Ctrl+c
+   - If needed, press Enter to stop listening for data
+   - If needed, press any key to get back to the application menu
+   - Type c and press Enter to stop the GSA
+   - Press Enter to stop listening for data
+   - Press any key to get back to the application menu
+   - Type f and press Enter to exit the GDS simulator
+   - In the terminal running the simulator, enter Ctrl+c
 
