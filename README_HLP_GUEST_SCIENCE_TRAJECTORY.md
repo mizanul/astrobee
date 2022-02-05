@@ -3,12 +3,14 @@
 
 ## Assumption:
 
-1.	Assumes initial Android emulator is setup through https://github.com/nasa/astrobee_android/blob/master/emulator.md
-  a.	Android Virtual Device has already been added to Android Studio (name: Nexus_5_API_25)
-  b.	Guest Science Manager is default running when Android Studio is launched
-  c.	HLP, MLP, LLP IP addresses have been set in /etc/hosts and home/freeflyer_android/scripts/emulator_setup.sh
-  d.	assumes adb is installed
-2.	assumes Astrobee Simulator setup accomplished through astrobee_env.sh script (custom script to set environment variables)
+1. Assumes initial Android emulator is setup through https://github.com/nasa/astrobee_android/blob/master/emulator.md
+
+  - Android Virtual Device has already been added to Android Studio (name: Nexus_5_API_25)
+  - Guest Science Manager is default running when Android Studio is launched
+  - HLP, MLP, LLP IP addresses have been set in /etc/hosts and home/freeflyer_android/scripts/emulator_setup.sh
+  - assumes adb is installed
+ 
+2. assumes Astrobee Simulator setup accomplished through astrobee_env.sh script (custom script to set environment variables)
 
 ## Open Terminal 1 
 
