@@ -1,4 +1,6 @@
 
+# Emulator
+
 ## Running Simulator
 ### Setting up environment:
 ```
