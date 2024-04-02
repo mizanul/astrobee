@@ -1,0 +1,87 @@
+--- astrobee_base.Dockerfile	2024-01-05 18:47:02.698271679 +0900
++++ astrobee_base.Dockerfile.new	2024-01-05 19:13:11.430214010 +0900
+@@ -4,17 +4,39 @@
+ # but it doesn't copy or build the entire code.
+ # You must set the docker context to be the repository root directory
+ 
+-ARG UBUNTU_VERSION=16.04
+-ARG ROS_VERSION=kinetic
+-FROM osrf/ros:${ROS_VERSION}-desktop-full
+-
+-ARG ROS_VERSION=kinetic
+-ARG PYTHON=''
++ARG UBUNTU_VERSION=20.04
++ARG ROS_VERSION=noetic
++ARG PYTHON='3'
++ARG http_proxy
++ARG https_proxy
++ARG HTTP_PROXY
++ARG HTTPS_PROXY
++ARG baseImage
++FROM ${baseImage:-osrf/ros:${ROS_VERSION}-desktop-full}
++ARG ROS_VERSION
++ARG PYTHON
++ARG http_proxy
++ARG https_proxy
++ARG HTTP_PROXY
++ARG HTTPS_PROXY
+ 
+ # try to suppress certain warnings during apt-get calls
+ ARG DEBIAN_FRONTEND=noninteractive
++RUN apt-get update && apt-get install -y wget sudo gnupg gnupg1 gnupg2
+ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
+ 
++RUN { \
++    echo 'Acquire::http:proxy "'${http_proxy}'";'; \
++    echo 'Acquire::https:proxy "'${https_proxy}'";'; \
++    } | tee /etc/apt/apt.conf
++
++RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add - && apt-get update && apt-get install -y gnupg vim iputils-ping net-tools
++RUN if [ "${http_proxy}" = "" ]; then \
++        apt-key adv --keyserver keyserver.ubuntu.com --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654; \
++    else \
++        apt-key adv --keyserver keyserver.ubuntu.com --keyserver-options http-proxy=${http_proxy} --recv-keys C1CF6E31E6BADE8868B172B4F42ED6FBAB17C654; \
++    fi;
++
+ # install of apt-utils suppresses bogus warnings later
+ RUN apt-get update \
+   && apt-get install -y apt-utils 2>&1 | grep -v "debconf: delaying package configuration, since apt-utils is not installed" \
+@@ -26,9 +48,6 @@ RUN apt-get update \
+   wget \
+   && rm -rf /var/lib/apt/lists/*
+ 
+-# suppress detached head warnings later
+-RUN git config --global advice.detachedHead false
+-
+ # Install Desktop ROS ------------------------------------------------------------
+ COPY ./scripts/setup/*.sh /setup/astrobee/
+ 
+@@ -42,6 +61,17 @@ RUN apt-get update \
+ 
+ # Install Astrobee----------------------------------------------------------------
+ COPY ./scripts/setup/debians /setup/astrobee/debians
++RUN sed -i "s;<HTTP_PROXY>;$http_proxy;g" /setup/astrobee/debians/opencv/patches/OpenCVDownload.patch \
++  && sed -i "s;<HTTPS_PROXY>;$https_proxy;g" /setup/astrobee/debians/opencv/patches/OpenCVDownload.patch
++
++RUN if [ "${http_proxy}" != "" ]; then \
++      export http_proxy=$http_proxy; \
++      export HTTP_PROXY=$HTTP_PROXY; \
++    fi; \
++    if [ "${https_proxy}" != "" ]; then \
++      export https_proxy=$https_proxy; \
++      export HTTPS_PROXY=$HTTPS_PROXY; \
++    fi; 
+ 
+ RUN apt-get update \
+   && /bin/bash /setup/astrobee/debians/build_install_debians.sh \
+@@ -56,4 +86,8 @@ RUN /setup/astrobee/install_desktop_pack
+ #Add the entrypoint for docker
+ RUN echo "#!/bin/bash\nset -e\n\nsource \"/opt/ros/${ROS_VERSION}/setup.bash\"\nsource \"/src/astrobee/devel/setup.bash\"\nexport ASTROBEE_CONFIG_DIR=\"/src/astrobee/src/astrobee/config\"\nexec \"\$@\"" > /astrobee_init.sh && \
+   chmod +x /astrobee_init.sh && \
+-  rosdep update 2>&1 | egrep -v 'as root|fix-permissions'
++  if [ "${https_proxy}" = "" ]; then \
++    unset https_proxy; \
++    unset HTTPS_PROXY; \
++  fi; \
++  rosdep update 2>&1 | egrep -v 'as root|fix-permissions'
+\ No newline at end of file

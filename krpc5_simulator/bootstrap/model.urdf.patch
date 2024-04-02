@@ -1,0 +1,35 @@
+--- model.urdf	2024-02-21 13:52:05.323440921 +0900
++++ model.urdf.new	2024-02-22 10:36:31.204804453 +0900
+@@ -48,28 +48,28 @@
+     <!-- Lostitem -->
+     <visual name="lostitem1">
+       <!-- AirLock -->
+-      <origin xyz="11.2625 -10.58 5.3625" rpy="1.570796 0 0" />
++      <origin xyz="11.2623482273209 -10.58 5.237154253061978" rpy="1.570796326794901 -1.5192245159172804 0.0" />
+       <geometry>
+         <mesh filename="package://astrobee_iss/meshes/lostitem1.dae"/>
+       </geometry>
+     </visual>
+     <visual name="lostitem2">
+       <!-- Bay6 Overhead -->
+-      <origin xyz="10.513384 -9.085172 3.76203" rpy="0 0 0" />
++      <origin xyz="10.985089420424165 -9.041179061432482 3.76093" rpy="0.0 -0.0 0.26812906478255893" />
+       <geometry>
+         <mesh filename="package://astrobee_iss/meshes/lostitem2.dae"/>
+       </geometry>
+     </visual>
+     <visual name="lostitem3">
+       <!-- Bay5 Overhead -->
+-      <origin xyz="10.6031 -7.71007 3.76093" rpy="0 0 1.570796" />
++      <origin xyz="11.253664228155634 -7.923154091157824 3.76093" rpy="0.0 -0.0 -2.4705425620327577" />
+       <geometry>
+         <mesh filename="package://astrobee_iss/meshes/lostitem3.dae"/>
+       </geometry>
+     </visual>
+     <visual name="lostitem4">
+       <!-- Bay4 Aft -->
+-      <origin xyz="9.866984 -6.673972 5.09531" rpy="-1.570796 0 -1.570796" />
++      <origin xyz="9.866984 -6.926466794543725 5.073470995452717" rpy="-1.5707963267948963 -0.704434627227193 -1.5707963267948963" />
+       <geometry>
+         <mesh filename="package://astrobee_iss/meshes/lostitem4.dae"/>
+       </geometry>

@@ -1,0 +1,6 @@
+description/media/astrobee_iss/media/materials/textures/lostitem1.png
+description/media/astrobee_iss/media/materials/textures/lostitem2.png
+description/media/astrobee_iss/media/materials/textures/lostitem3.png
+description/media/astrobee_iss/media/materials/textures/lostitem4.png
+description/media/astrobee_iss/media/materials/textures/lostitem_target.png
+description/media/astrobee_iss/media/materials/textures/qr.png

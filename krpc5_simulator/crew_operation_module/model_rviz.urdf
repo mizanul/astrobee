@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<robot name="my_robo" xmlns:xacro="http://ros.org/wiki/xacro">
+ <link name="rviz">
+   <inertial>
+     <origin xyz="0 0 0.5" rpy="0 0 0"/>
+     <mass value="1"/>
+     <inertia ixx="0.1"  ixy="0"  ixz="0" iyy="0.1" iyz="0" izz="0.1" />
+   </inertial>
+   <visual>
+     <origin xyz="11.143 6.1607 -4.8654" rpy="1.57 3.14 0" />
+     <geometry>
+       <mesh filename="package://astrobee_iss/meshes/lostitem_target.dae"/>
+     </geometry>
+   </visual>
+ </link>
+ <gazebo reference="body_link">
+   <material>Gazebo/Red</material>
+ </gazebo>
+</robot>

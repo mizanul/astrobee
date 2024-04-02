@@ -1,0 +1,11 @@
+--- ./src/astrobee/astrobee/config/mobility/planner_trapezoidal.config	2024-03-15 10:27:49.936644146 +0900
++++ ./src/astrobee/astrobee/config/mobility/planner_trapezoidal.config.new	2024-03-15 10:28:20.436643377 +0900
+@@ -25,7 +25,7 @@ parameters = {
+   -- It is not inituituve to use faceforward mode for very small translations.
+   -- For example, in a bootstrap or initial move
+     id = "faceforward_shim", reconfigurable = true, type = "double",
+-    default = 0.2, min = 0.0, max = 10.0, unit = "m",
++    default = 10.0, min = 0.0, max = 10.0, unit = "m",
+     description = "Distance below which faceforward will always be disabled"
+   }
+ }

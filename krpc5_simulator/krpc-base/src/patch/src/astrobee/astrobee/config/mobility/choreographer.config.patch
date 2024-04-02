@@ -1,0 +1,20 @@
+--- ./src/astrobee/astrobee/config/mobility/choreographer.config	2024-03-14 20:40:33.493895008 +0900
++++ ./src/astrobee/astrobee/config/mobility/choreographer.config.new	2024-03-14 20:41:20.625893820 +0900
+@@ -69,7 +69,7 @@ parameters = {
+     -- validation engine, which is why it is extremelt important to set the
+     -- faceforward mode for both MOVE and EXECUTE commands
+     id = "enable_faceforward", reconfigurable = true, type = "boolean",
+-    default = true, unit = "boolean",
++    default = false, unit = "boolean",
+     description = "Should planning be face-forward only?"
+   },{
+     -- Obstacle detection is the responsibility of the mapper, and it always
+@@ -161,7 +161,7 @@ parameters = {
+     -- are close to our current pose. In this case we don't have to plan or
+     -- even move, and we return an ALREADY_THERE success response.
+     id = "tolerance_pos", reconfigurable = true, type = "double",
+-    default = 0.05, min = 0.0, max = 1.0, unit = "m",
++    default = 0.049, min = 0.0, max = 1.0, unit = "m",
+     description = "Position tolerance for checking if we are already at pose"
+   },{
+     -- When a move request is made we need to check if the sequence of poses
