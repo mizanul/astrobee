@@ -1,0 +1,9 @@
+Summary for kibo_rpc_api-debug-5th-jvm/classes.jar
+Decompiled with CFR 0.152
+
+
+jp.jaxa.iss.kibo.rpc.api.sub.PhaseConfig
+----------------------------
+
+readFile(java.lang.String )
+  Exception : org.benf.cfr.reader.util.ConfusedCFRException: Started 4 blocks at once

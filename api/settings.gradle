@@ -1,0 +1,3 @@
+rootProject.name = 'krpc-5-api'
+include ':libraries:opencv'
+

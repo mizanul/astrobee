@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <!-- Console appender -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+
+        <!-- File appender -->
+        <File name="GDSFile" fileName="/home/simulator/logs/gds_activities.log" append="true">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </File>
+    </Appenders>
+
+    <Loggers>
+        <!-- Your package-specific loggers -->
+        <Logger name="gov.nasa.arc.astrobee" level="debug" additivity="false">
+            <AppenderRef ref="GDSFile"/>
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <Logger name="org.ros" level="info" additivity="false">
+            <AppenderRef ref="GDSFile"/>
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <Logger name="org.stemx.arc.astrobee.rpc" level="info" additivity="false">
+            <AppenderRef ref="GDSFile"/>
+            <AppenderRef ref="Console"/>
+        </Logger>
+
+        <!-- Root logger -->
+        <Root level="warn">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="GDSFile"/>
+        </Root>
+    </Loggers>
+</Configuration>

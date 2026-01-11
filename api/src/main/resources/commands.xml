@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<apkInfo>
+    <apkName>sim-krpc-4</apkName>
+    <shortName>sim-krpc-4</shortName> <!-- Optional -->
+    <primary>true</primary> <!-- Required -->
+    <commands>
+        <command
+            name="Run runPlan1"
+            syntax="{&quot;name&quot;: &quot;runPlan1&quot;}" />
+    </commands>
+</apkInfo>
