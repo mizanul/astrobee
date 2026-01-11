@@ -36,30 +36,31 @@ public class YourService extends KiboRpcService {
         /* *********************************************************************** */
         /* Write your code to recognize type and number of items in the each area! */
         /* *********************************************************************** */
+        api.getActiveTargets();
 
         // When you recognize items, let’s set the type and number.
-        api.setAreaInfo(1, "item_name", 1);
+        //api.setAreaInfo(1, "item_name", 1);
 
         /* **************************************************** */
         /* Let's move to the each area and recognize the items. */
         /* **************************************************** */
 
         // When you move to the front of the astronaut, report the rounding completion.
-        api.reportRoundingCompletion();
+        //api.reportRoundingCompletion();
 
         /* ********************************************************** */
         /* Write your code to recognize which item the astronaut has. */
         /* ********************************************************** */
 
         // Let's notify the astronaut when you recognize it.
-        api.notifyRecognitionItem();
+        //api.notifyRecognitionItem();
 
         /* ******************************************************************************************************* */
         /* Write your code to move Astrobee to the location of the target item (what the astronaut is looking for) */
         /* ******************************************************************************************************* */
 
         // Take a snapshot of the target item.
-        api.takeTargetItemSnapshot();
+        //api.takeTargetItemSnapshot();
     }
 
     @Override
