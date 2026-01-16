@@ -1,7 +1,7 @@
 package jp.jaxa.iss.kibo.rpc.sampleapk;
 
 import java.io.File;
-import gov.nasa.arc.astrobee.android.gs.JavaGuestScienceManager;
+import jp.jaxa.iss.kibo.rpc.api.sub.JavaGuestScienceManager;
 //import jp.jaxa.iss.kibo.rpc.api.*;
 
 public class StemxAstrobeeMain {
