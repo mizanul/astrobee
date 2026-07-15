@@ -400,4 +400,530 @@ This architecture provides several advantages:
 * **Traceability:** Comprehensive audit logging records all significant user actions, enabling compliance reporting, usage analysis, and forensic investigations.
 * **Extensibility:** The same workflow can support additional visualization types, such as line charts, heat maps, scatter plots, and dashboards, without requiring significant architectural changes.
 
-This end-to-end workflow demonstrates how a modern analytics platform securely transforms a user's high-level visualization request into a validated SQL query, retrieves the necessary data, renders an interactive stacked bar chart, and records the operation in an audit log for governance and accountability.
+
+=============================
+
+
+For a **React + Node.js + SQL Server** analytics application, I recommend implementing authorization in **three layers**:
+
+1. **Dataset-level permissions** (What data can the user access?)
+2. **Column-level permissions** (Which fields can the user see?)
+3. **Feature-level authorization** (What actions can the user perform?)
+
+Do **not** rely on the React frontend to enforce security. The frontend should only hide unavailable options for usability. The **Node.js backend** must enforce all authorization rules before generating SQL or returning data.
+
+---
+
+# Overall Authorization Architecture
+
+```text
+                    User Login
+                         │
+                         ▼
+                Authentication (JWT)
+                         │
+                         ▼
+                Authorization Service
+                         │
+     ┌───────────────────┼────────────────────┐
+     │                   │                    │
+     ▼                   ▼                    ▼
+Dataset Permission   Column Permission   Feature Permission
+     │                   │                    │
+     └───────────────────┼────────────────────┘
+                         │
+                  Query Builder Service
+                         │
+                  SQL Generation Engine
+                         │
+                     SQL Server
+```
+
+---
+
+# 1. Dataset-Level Permissions
+
+This determines **which datasets a user is allowed to query**.
+
+Example:
+
+```
+Datasets
+
+Sales
+Employees
+Finance
+Inventory
+Research
+```
+
+Suppose there are three users:
+
+| User  | Allowed Datasets |
+| ----- | ---------------- |
+| Alice | Sales, Inventory |
+| Bob   | Finance          |
+| John  | Sales, Research  |
+
+When John logs in, he should only see:
+
+```
+Sales
+
+Research
+```
+
+The backend should never return the Finance dataset.
+
+---
+
+## Database Design
+
+### datasets
+
+| DatasetID | Name      |
+| --------- | --------- |
+| 1         | Sales     |
+| 2         | Finance   |
+| 3         | Employees |
+
+---
+
+### user_dataset_permission
+
+| UserID | DatasetID |
+| ------ | --------- |
+| 1      | 1         |
+| 1      | 3         |
+| 2      | 2         |
+| 3      | 1         |
+| 3      | 2         |
+
+---
+
+Backend:
+
+```
+SELECT DatasetID
+FROM user_dataset_permission
+WHERE UserID=@UserID
+```
+
+Only those datasets are returned.
+
+---
+
+# 2. Column-Level Permissions
+
+This is extremely important in BI systems.
+
+Suppose the Sales table contains:
+
+```
+OrderID
+
+Customer
+
+Revenue
+
+Cost
+
+Profit
+
+Salary
+
+CreditCard
+```
+
+An Analyst may see:
+
+```
+Customer
+
+Revenue
+
+Profit
+```
+
+A Manager may additionally see:
+
+```
+Cost
+```
+
+An HR administrator may see:
+
+```
+Salary
+```
+
+Nobody except administrators should see:
+
+```
+CreditCard
+```
+
+---
+
+## Database Design
+
+### columns
+
+| ColumnID | DatasetID | Name    |
+| -------- | --------- | ------- |
+| 1        | Sales     | Revenue |
+| 2        | Sales     | Profit  |
+| 3        | Sales     | Salary  |
+
+---
+
+### role_column_permission
+
+| Role    | Column  |
+| ------- | ------- |
+| Analyst | Revenue |
+| Analyst | Profit  |
+| Manager | Cost    |
+| HR      | Salary  |
+
+---
+
+When the frontend requests columns:
+
+```
+GET /api/datasets/1/columns
+```
+
+The backend returns only authorized columns.
+
+Example:
+
+```json
+[
+   "Region",
+   "Revenue",
+   "Profit"
+]
+```
+
+The frontend never even knows that Salary exists.
+
+---
+
+# SQL Generation
+
+Suppose the user requests
+
+```
+Revenue
+
+Salary
+```
+
+Backend checks permissions.
+
+Allowed:
+
+```
+Revenue
+```
+
+Denied:
+
+```
+Salary
+```
+
+Reject request:
+
+```
+403 Forbidden
+
+Unauthorized column:
+Salary
+```
+
+Never silently ignore unauthorized columns.
+
+---
+
+# 3. Feature-Level Authorization
+
+Feature authorization controls **what users can do**.
+
+Examples:
+
+```
+Export CSV
+
+Export Excel
+
+Create Dashboard
+
+Delete Dashboard
+
+Share Dashboard
+
+Schedule Reports
+
+Create Calculated Fields
+
+Execute SQL
+
+Manage Users
+```
+
+---
+
+## Database Design
+
+### features
+
+| FeatureID | Name           |
+| --------- | -------------- |
+| 1         | ExportCSV      |
+| 2         | ExportPDF      |
+| 3         | Dashboard      |
+| 4         | ScheduleReport |
+
+---
+
+### role_feature_permission
+
+| Role    | Feature    |
+| ------- | ---------- |
+| Viewer  | Dashboard  |
+| Analyst | Dashboard  |
+| Analyst | ExportCSV  |
+| Manager | ExportPDF  |
+| Admin   | Everything |
+
+---
+
+When React loads
+
+```
+Dashboard
+```
+
+Backend returns
+
+```json
+{
+   "ExportCSV":true,
+   "ExportExcel":false,
+   "CreateDashboard":true,
+   "DeleteDashboard":false
+}
+```
+
+React disables unavailable buttons.
+
+But the backend still verifies authorization before executing any action.
+
+---
+
+# Authorization Middleware
+
+Every API request passes through:
+
+```
+JWT Verification
+
+↓
+
+Role Lookup
+
+↓
+
+Dataset Check
+
+↓
+
+Column Check
+
+↓
+
+Feature Check
+
+↓
+
+Execute Query
+```
+
+If any check fails:
+
+```
+403 Forbidden
+```
+
+---
+
+# Example Workflow
+
+John wants a stacked bar chart.
+
+```
+Dataset:
+Sales
+
+Columns:
+Region
+Revenue
+Salary
+
+Feature:
+Export PDF
+```
+
+Backend performs:
+
+### Step 1
+
+Authenticate
+
+```
+✓
+```
+
+---
+
+### Step 2
+
+Dataset permission
+
+```
+Sales
+
+✓
+```
+
+---
+
+### Step 3
+
+Column permission
+
+```
+Region
+
+✓
+
+Revenue
+
+✓
+
+Salary
+
+✗
+```
+
+Stop.
+
+Return
+
+```
+403
+
+Unauthorized column
+Salary
+```
+
+---
+
+Another example
+
+Columns are valid.
+
+User clicks
+
+```
+Export PDF
+```
+
+Feature permission
+
+```
+Export PDF
+
+✗
+```
+
+Return
+
+```
+403
+
+Feature not permitted
+```
+
+---
+
+# SQL Generation After Authorization
+
+Only after all checks succeed does the backend generate SQL.
+
+```
+SELECT
+Region,
+SUM(Revenue)
+FROM Sales
+GROUP BY Region
+```
+
+Notice
+
+```
+Salary
+```
+
+never appears.
+
+---
+
+# Audit Logging
+
+Every authorization decision should be logged.
+
+| Timestamp | User | Action         | Result  |
+| --------- | ---- | -------------- | ------- |
+| 10:05     | John | Open Sales     | Allowed |
+| 10:06     | John | Read Salary    | Denied  |
+| 10:08     | John | Export PDF     | Denied  |
+| 10:10     | John | Generate Chart | Allowed |
+
+These logs are invaluable for security monitoring and compliance.
+
+---
+
+# Recommended Enterprise Design
+
+For a production analytics platform, I recommend modeling permissions around **roles**, with optional user-specific overrides:
+
+```
+Users
+    │
+    ▼
+Roles
+    │
+    ├── Dataset Permissions
+    │
+    ├── Column Permissions
+    │
+    └── Feature Permissions
+```
+
+Suggested tables:
+
+* `Users`
+* `Roles`
+* `UserRoles`
+* `Datasets`
+* `Columns`
+* `Features`
+* `RoleDatasetPermissions`
+* `RoleColumnPermissions`
+* `RoleFeaturePermissions`
+* `UserPermissionOverrides` (optional)
+
+
