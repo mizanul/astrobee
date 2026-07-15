@@ -1701,6 +1701,322 @@ Since your application is a **data query builder and visualization platform** wi
 
 This architecture follows the principle of **defense in depth** while taking advantage of Cube's strengths as the semantic and security layer for analytical queries, instead of duplicating those responsibilities in the application or database.
 
+===============================================================================
+
+
+Yes, and it is the recommended deployment architecture. Placing **NGINX in front of React** provides several benefits including SSL termination, routing, caching, compression, and acting as the single public entry point to your application.
+
+For your architecture, I would recommend the following:
+
+```text
+                          Internet
+                              │
+                       HTTPS (443)
+                              │
+                              ▼
+                         NGINX Reverse Proxy
+        ┌─────────────────────┼──────────────────────┐
+        │                     │                      │
+        ▼                     ▼                      ▼
+   React SPA             Node.js API            Static Files
+ (/index.html)          (/api/*)               Images/CSS/JS
+                              │
+                              ▼
+                  Authentication & Authorization
+                              │
+                              ▼
+                      Cube Semantic Layer
+                              │
+                              ▼
+                     Microsoft SQL Server
+```
+
+## Responsibilities of Each Layer
+
+### 1. NGINX
+
+NGINX should handle infrastructure-level concerns, not application authorization.
+
+Typical responsibilities include:
+
+* SSL/TLS termination
+* HTTP → HTTPS redirection
+* Serving the React static files
+* Reverse proxying API requests
+* Load balancing (if multiple Node.js instances exist)
+* Compression (Gzip/Brotli)
+* Static asset caching
+* Basic rate limiting
+* Security headers
+* Request logging
+
+For example:
+
+```
+https://analytics.company.com/
+```
+
+serves the React application, while
+
+```
+https://analytics.company.com/api/...
+```
+
+is proxied to Node.js.
+
+---
+
+### 2. React
+
+React is responsible for:
+
+* Login page
+* Query Builder
+* Dashboard
+* Chart rendering
+* Sending the JWT with API requests
+
+React **should not** enforce security. It may hide unavailable buttons, but the backend must make the final authorization decisions.
+
+---
+
+### 3. Node.js
+
+Node.js remains the security gateway for the application.
+
+Responsibilities include:
+
+* User authentication
+* JWT validation
+* Feature-level authorization
+* Business rules
+* Audit logging
+* Passing the user's security context to Cube
+
+For example:
+
+```
+Create Dashboard
+
+↓
+
+Allowed?
+
+↓
+
+YES
+
+↓
+
+Forward query to Cube
+```
+
+---
+
+### 4. Cube
+
+Cube enforces data access policies:
+
+* Dataset permissions
+* Row-level security
+* Column-level visibility
+* Semantic modeling
+* SQL generation
+* Pre-aggregations
+* Query caching
+
+---
+
+### 5. SQL Server
+
+SQL Server is responsible for:
+
+* Data storage
+* Query execution
+* Database roles
+* Optional Row-Level Security (for defense in depth)
+* Encryption
+* Database auditing
+
+---
+
+# Authentication Flow
+
+```text
+User
+ │
+ │ Login
+ ▼
+NGINX
+ │
+ ▼
+Node.js
+ │
+ │ Verify Username/Password
+ ▼
+SQL Server
+ │
+ ▼
+JWT Created
+ │
+ ▼
+React Stores JWT
+```
+
+Subsequent requests:
+
+```text
+React
+ │
+ │ Authorization: Bearer <JWT>
+ ▼
+NGINX
+ │
+ ▼
+Node.js
+ │
+ │ Verify JWT
+ │
+ ▼
+Cube
+ │
+ ▼
+SQL Server
+```
+
+---
+
+# Creating a Stacked Bar Chart
+
+```text
+User
+ │
+ ▼
+React Query Builder
+ │
+ ▼
+NGINX
+ │
+ ▼
+Node.js
+ │
+ Validate JWT
+ │
+ Check Feature Permission
+ │
+ Log Request
+ ▼
+Cube
+ │
+ Validate Dataset
+ │
+ Apply Row Security
+ │
+ Apply Column Security
+ │
+ Generate SQL
+ ▼
+SQL Server
+ │
+ Execute Query
+ ▼
+Cube
+ │
+ Return Aggregated Data
+ ▼
+Node.js
+ │
+ Audit Log
+ ▼
+NGINX
+ │
+ ▼
+React
+ │
+ Render Stacked Bar Chart
+```
+
+---
+
+# What Security Can NGINX Provide?
+
+NGINX is not an authorization engine, but it is an excellent first line of defense.
+
+It can:
+
+* Redirect all HTTP traffic to HTTPS.
+* Terminate TLS so Node.js only receives encrypted requests.
+* Add security headers such as `Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options`, and `Content-Security-Policy`.
+* Rate-limit login or API endpoints to reduce brute-force attacks.
+* Restrict request sizes to prevent oversized uploads.
+* Log all incoming requests for operational monitoring.
+* Optionally restrict access to administrative paths by IP address or client certificate if appropriate for your environment.
+
+---
+
+## Recommended Production Architecture
+
+For an enterprise analytics platform, the complete architecture would be:
+
+```text
+                    Internet
+                        │
+                HTTPS / TLS (443)
+                        │
+                        ▼
+             +----------------------+
+             |        NGINX         |
+             |----------------------|
+             | SSL Termination      |
+             | Static React Files   |
+             | Reverse Proxy        |
+             | Compression          |
+             | Rate Limiting        |
+             | Security Headers     |
+             | Access Logging       |
+             +----------+-----------+
+                        │
+                        ▼
+             +----------------------+
+             |   Node.js / Express  |
+             |----------------------|
+             | Authentication       |
+             | JWT Validation       |
+             | Feature RBAC         |
+             | Business Logic       |
+             | Audit Logging        |
+             +----------+-----------+
+                        │
+                        ▼
+             +----------------------+
+             |         Cube         |
+             |----------------------|
+             | Semantic Model       |
+             | Dataset Security     |
+             | Column Security      |
+             | Row-Level Security   |
+             | Query Optimization   |
+             | Pre-Aggregations     |
+             +----------+-----------+
+                        │
+                        ▼
+             +----------------------+
+             | Microsoft SQL Server |
+             |----------------------|
+             | Tables & Views       |
+             | Stored Procedures    |
+             | Database Roles       |
+             | Encryption           |
+             | Database Auditing    |
+             +----------------------+
+```
+
+This architecture cleanly separates responsibilities:
+
+* **NGINX** secures and routes HTTP traffic.
+* **Node.js** secures application functionality and user actions.
+* **Cube** secures analytical data access and query generation.
+* **SQL Server** protects the underlying data and provides a final layer of security.
 
 
 
