@@ -1,3 +1,796 @@
+# Architecture:
+
+* **React frontend** → Docker container
+* **Node.js backend API** → Docker container
+* **MS SQL Server** → Docker container
+* **OLAP Cube** → Docker container
+* **NGINX** → reverse proxy / gateway
+* **GitLab** → source control + CI/CD
+* **JFrog Artifactory** → Docker registry + dependency repository
+
+We should implement a **multi-stage CI/CD pipeline** with unit tests, integration tests, security tests, image scanning, staging deployment, and production deployment.
+
+A recommended enterprise workflow looks like this:
+
+
+# 1. Recommended CI/CD Pipeline Overview
+
+```
+Developer
+   |
+   |
+   v
+GitLab Repository
+   |
+   |
+   |  Merge Request
+   |
+   v
++-----------------------+
+| GitLab CI Pipeline    |
++-----------------------+
+          |
+          |
+          +----------------+
+          |                |
+          v                v
+     Code Quality      Security Scan
+          |
+          |
+          v
+   Build Docker Images
+          |
+          |
+          v
+ Push Images to JFrog
+          |
+          |
+          v
+ Integration Test Environment
+          |
+          |
+          +----------------------+
+          |                      |
+          v                      v
+      API Tests              UI Tests
+      Security Tests         NGINX Tests
+      DB Tests               Cube Tests
+          |
+          |
+          v
+    Deploy Staging
+          |
+          |
+          v
+ Production Approval
+          |
+          |
+          v
+ Production Deployment
+```
+
+---
+
+# 2. Trigger Strategy
+
+Do not run everything on every commit.
+
+Recommended triggers:
+
+| Stage            | Trigger               |
+| ---------------- | --------------------- |
+| Developer commit | Unit test             |
+| Merge Request    | Build + security scan |
+| Merge to main    | Integration test      |
+| Release tag      | Production deployment |
+| Nightly          | Full regression       |
+
+Example:
+
+```
+feature branch
+      |
+      |
+      v
+Developer Push
+      |
+      |
+      v
+GitLab Pipeline
+      |
+      |
+      +---- Unit Tests
+      |
+      +---- Lint
+      |
+      +---- SAST
+      |
+      v
+
+Merge Request Approved
+
+      |
+      v
+
+main branch
+
+      |
+      +---- Build Images
+      |
+      +---- Push JFrog
+      |
+      +---- Integration Test
+
+      |
+      v
+
+Production Release
+```
+
+---
+
+# 3. Repository Structure
+
+I recommend a mono-repo:
+
+```
+application/
+
+├── frontend/
+│    ├── Dockerfile
+│    ├── package.json
+│    └── src/
+│
+├── backend/
+│    ├── Dockerfile
+│    ├── package.json
+│    └── src/
+│
+├── database/
+│    ├── schema.sql
+│    └── migration/
+│
+├── cube/
+│    ├── Dockerfile
+│    └── models/
+│
+├── nginx/
+│    └── nginx.conf
+│
+├── integration-test/
+│    ├── api/
+│    ├── security/
+│    └── playwright/
+│
+└── docker-compose.test.yml
+
+```
+
+---
+
+# 4. Integration Test Environment
+
+Before production create a temporary environment:
+
+```
+GitLab Runner
+       |
+       |
+       v
+
+docker-compose.integration.yml
+
+
++-------------+
+| NGINX       |
+| Port 443    |
++-------------+
+       |
+       |
++-------------+
+| React       |
++-------------+
+       |
+       |
++-------------+
+| Node API    |
++-------------+
+       |
+       |
++-------------+
+| SQL Server  |
++-------------+
+       |
+       |
++-------------+
+| Cube        |
++-------------+
+
+```
+
+Your integration environment should be identical to production.
+
+---
+
+# 5. Docker Compose Integration Test
+
+Example:
+
+`docker-compose.integration.yml`
+
+```yaml
+version: "3.9"
+
+services:
+
+ nginx:
+   image: company/nginx:${VERSION}
+   ports:
+    - "443:443"
+   depends_on:
+    - frontend
+    - backend
+
+
+ frontend:
+   image: company/frontend:${VERSION}
+
+
+ backend:
+   image: company/backend:${VERSION}
+   environment:
+     DB_HOST: sqlserver
+     CUBE_HOST: cube
+
+
+ sqlserver:
+   image: mcr.microsoft.com/mssql/server:2022-latest
+   environment:
+     ACCEPT_EULA: Y
+     SA_PASSWORD: "Password123!"
+
+
+ cube:
+   image: company/cube:${VERSION}
+
+```
+
+---
+
+# 6. Integration Test Types
+
+## A. Frontend Test
+
+Use:
+
+* Playwright
+* Cypress
+
+Example:
+
+```
+User opens browser
+
+https://test.company.com
+
+Login
+
+Create stacked bar chart
+
+Verify chart rendering
+
+```
+
+Example:
+
+```javascript
+test('create chart', async ({page})=>{
+
+await page.goto(
+'https://nginx/dashboard'
+);
+
+await page.fill(
+'#dataset',
+'Sales'
+);
+
+await page.click(
+'Create Chart'
+);
+
+
+expect(
+await page.locator('canvas')
+).toBeVisible();
+
+});
+
+```
+
+---
+
+# B. API Integration Test
+
+Use:
+
+* Jest
+* Supertest
+
+Example:
+
+```javascript
+describe("Chart API",()=>{
+
+
+test("create stacked chart",async()=>{
+
+
+const response =
+await request(app)
+.post('/api/chart')
+.send({
+
+dataset:"sales",
+type:"stacked-bar"
+
+});
+
+
+expect(response.status)
+.toBe(200);
+
+
+});
+
+
+});
+
+```
+
+---
+
+# C. Database Test
+
+Validate:
+
+* connection
+* stored procedures
+* permissions
+* data correctness
+
+Example:
+
+```
+Node API
+ |
+ |
+Execute:
+
+EXEC dbo.GetSalesChart
+
+ |
+ |
+Verify result
+
+```
+
+---
+
+# D. Cube Test
+
+Your test:
+
+```
+React
+
+ |
+ |
+Node API
+
+ |
+ |
+Cube Query
+
+ |
+ |
+Validate:
+
+dimensions
+measures
+filters
+
+```
+
+Example:
+
+```javascript
+expect(result.columns)
+.toContain("Revenue");
+
+
+expect(result.rows.length)
+.toBeGreaterThan(0);
+
+```
+
+---
+
+# E. NGINX Test
+
+Verify:
+
+## HTTPS
+
+```
+curl https://test.company.com
+
+```
+
+## Routing
+
+```
+/api/*
+
+       |
+       v
+
+backend
+
+
+/
+
+
+       |
+       v
+
+frontend
+
+```
+
+Test:
+
+```bash
+curl \
+https://test.company.com/api/users
+
+```
+
+Expected:
+
+```
+HTTP 200
+
+```
+
+---
+
+# F. Security Testing
+
+Add:
+
+## Container scanning
+
+Tools:
+
+* Trivy
+* JFrog Xray
+
+Example:
+
+```
+docker image scan backend:1.0
+
+```
+
+---
+
+## API Security
+
+Use:
+
+* OWASP ZAP
+
+Test:
+
+* SQL Injection
+* XSS
+* JWT validation
+* CORS
+* CSRF
+
+Pipeline:
+
+```
+Deploy Test Environment
+
+        |
+
+OWASP ZAP
+
+        |
+
+Report
+
+```
+
+---
+
+# 7. GitLab Pipeline Example
+
+`.gitlab-ci.yml`
+
+```yaml
+stages:
+
+ - test
+ - build
+ - security
+ - integration
+ - deploy
+
+
+
+unit-test:
+
+ stage:test
+
+ script:
+
+  - npm install
+  - npm test
+
+
+
+build-images:
+
+ stage:build
+
+ script:
+
+  - docker build \
+    -t jfrog/frontend:$CI_COMMIT_SHA \
+    frontend/
+
+
+  - docker build \
+    -t jfrog/backend:$CI_COMMIT_SHA \
+    backend/
+
+
+  - docker push \
+    jfrog/frontend:$CI_COMMIT_SHA
+
+
+
+security-scan:
+
+ stage:security
+
+ script:
+
+  - trivy image \
+    jfrog/backend:$CI_COMMIT_SHA
+
+
+
+integration-test:
+
+ stage:integration
+
+ script:
+
+  - docker compose \
+    -f docker-compose.integration.yml up -d
+
+
+  - npm run integration-test
+
+
+  - docker compose down
+
+
+
+deploy-production:
+
+ stage:deploy
+
+ when:manual
+
+ script:
+
+  - kubectl apply \
+    -f production.yaml
+
+```
+
+---
+
+# 8. JFrog Image Strategy
+
+Store:
+
+```
+jfrog.company.com/
+
+
+docker/
+
+ |
+ |
+ + frontend/
+ |
+ + backend/
+ |
+ + cube/
+ |
+ + nginx/
+
+
+npm/
+
+ |
+ + node packages
+
+
+```
+
+Image tags:
+
+```
+frontend:
+
+1.0.0
+1.0.1
+commit-a82f9d
+
+```
+
+Never deploy:
+
+```
+latest
+
+```
+
+Use immutable versions.
+
+---
+
+# 9. Production Deployment
+
+Recommended:
+
+```
+JFrog
+
+ |
+ |
+ v
+
+Kubernetes Cluster
+
+ |
+ |
+ +----------------+
+ | NGINX Ingress |
+ +----------------+
+
+ |
+ + frontend pods
+
+ |
+ + backend pods
+
+ |
+ + cube pods
+
+ |
+ + SQL Server
+
+```
+
+Deployment:
+
+```
+kubectl set image deployment/backend \
+backend=jfrog/backend:1.2.5
+
+```
+
+---
+
+# 10. Recommended Pipeline Stages
+
+For your system I would implement:
+
+```
+Stage 1
+========
+Developer Push
+
+- ESLint
+- React test
+- Node test
+
+
+Stage 2
+========
+Merge Request
+
+- Code review
+- SAST
+- Dependency scan
+
+
+Stage 3
+========
+Main Branch
+
+- Build images
+- Push JFrog
+
+
+Stage 4
+========
+Integration
+
+Start:
+
+NGINX
+React
+Node
+SQL
+Cube
+
+
+Run:
+
+- Login test
+- Authorization test
+- API test
+- Chart generation test
+- Cube query test
+- Security test
+
+
+Stage 5
+========
+Staging
+
+
+Stage 6
+========
+Production approval
+
+
+Stage 7
+========
+Production deployment
+
+```
+
+---
+
+**data analytics platform (React chart builder + Node API + SQL Server + Cube)**:
+
+1. **Dataset permission tests**
+2. **Column-level security tests**
+3. **Role-based access tests**
+4. **Large dataset performance tests**
+5. **Cube query regression tests**
+
+because those are the highest-risk areas.
+
+
+
+
+
+=================================================================
+
+
+
+
 For a **React + Node.js + MS SQL Server** application, integration testing should verify that all layers work together:
 
 * React frontend ↔ Node.js API
