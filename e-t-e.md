@@ -927,3 +927,381 @@ Suggested tables:
 * `UserPermissionOverrides` (optional)
 
 
+===============================================================
+
+**SQL Server has built-in Role-Based Access Control (RBAC)** through database roles, schemas, permissions, and Row-Level Security (RLS). However, whether you should rely on SQL Server RBAC alone depends on your application architecture.
+
+For a **React → Node.js → SQL Server** application with a dynamic query builder, I recommend a **hybrid approach**:
+
+* **Application RBAC (Node.js)** for business logic, datasets, columns, and features.
+* **SQL Server security** for protecting the database itself and providing defense in depth.
+
+---
+
+# Option 1: SQL Server Database Roles (Recommended)
+
+SQL Server supports database roles.
+
+```text
+Database
+
+├── db_admin
+├── db_analyst
+├── db_manager
+├── db_viewer
+```
+
+Example:
+
+```sql
+CREATE ROLE Analyst;
+CREATE ROLE Manager;
+CREATE ROLE Administrator;
+```
+
+Grant permissions:
+
+```sql
+GRANT SELECT ON dbo.Sales TO Analyst;
+
+GRANT SELECT, INSERT, UPDATE
+ON dbo.Sales
+TO Manager;
+
+GRANT CONTROL
+ON DATABASE::AnalyticsDB
+TO Administrator;
+```
+
+Assign users:
+
+```sql
+ALTER ROLE Analyst
+ADD MEMBER John;
+```
+
+Advantages
+
+* Built into SQL Server
+* Easy to manage
+* Secure
+* No application code required
+
+Disadvantages
+
+* Not practical if all users connect through a single application service account (which is common in web applications).
+
+---
+
+# Option 2: Stored Procedure Security
+
+Instead of granting access to tables, expose only stored procedures.
+
+```
+User
+
+↓
+
+Stored Procedure
+
+↓
+
+Tables
+```
+
+Example:
+
+```sql
+DENY SELECT ON dbo.Sales TO PUBLIC;
+
+GRANT EXECUTE
+ON dbo.sp_GetSalesChart
+TO Analyst;
+```
+
+Users can execute:
+
+```sql
+EXEC sp_GetSalesChart
+```
+
+but cannot execute:
+
+```sql
+SELECT *
+FROM Sales
+```
+
+Advantages
+
+* Tables are never directly exposed.
+* Business logic stays inside the database.
+* Easier to audit.
+
+---
+
+# Option 3: Row-Level Security (RLS)
+
+SQL Server supports Row-Level Security.
+
+Example:
+
+```
+Sales
+
+Region
+
+North
+South
+East
+West
+```
+
+Manager A
+
+```
+North
+
+South
+```
+
+Manager B
+
+```
+East
+
+West
+```
+
+Both execute:
+
+```sql
+SELECT *
+FROM Sales
+```
+
+SQL Server automatically filters rows.
+
+This is implemented using:
+
+* Security Policy
+* Predicate Function
+
+Example:
+
+```sql
+CREATE SECURITY POLICY SalesSecurityPolicy
+ADD FILTER PREDICATE
+dbo.fn_FilterSales(UserID)
+ON dbo.Sales;
+```
+
+Advantages
+
+* Automatic filtering
+* Application cannot accidentally bypass row restrictions
+* Very useful in multi-tenant applications
+
+---
+
+# Option 4: Column-Level Security
+
+SQL Server also supports column-level permissions.
+
+Suppose:
+
+```
+Employee
+
+ID
+
+Name
+
+Salary
+
+SSN
+```
+
+Grant:
+
+```sql
+GRANT SELECT
+ON OBJECT::Employee (Name)
+TO Analyst;
+```
+
+Deny:
+
+```sql
+DENY SELECT
+ON OBJECT::Employee (Salary)
+TO Analyst;
+```
+
+Now:
+
+```sql
+SELECT Salary
+FROM Employee
+```
+
+returns a permission error.
+
+---
+
+# Option 5: Dynamic Data Masking
+
+Suppose:
+
+```
+CreditCard
+```
+
+Normal user sees:
+
+```
+XXXX-XXXX-XXXX-1234
+```
+
+Administrator sees:
+
+```
+4321-5678-9876-1234
+```
+
+Example:
+
+```sql
+ALTER TABLE Customers
+ALTER COLUMN CreditCard
+ADD MASKED
+WITH (FUNCTION='partial(0,"XXXX-XXXX-",4)');
+```
+
+This is useful for reducing accidental exposure but is **not a substitute for authorization**, because privileged users can bypass masking.
+
+---
+
+# Option 6: Role Tables Inside SQL Server
+
+Many enterprise applications maintain their own RBAC tables.
+
+Example:
+
+```
+Users
+
+Roles
+
+Permissions
+
+RolePermissions
+
+UserRoles
+```
+
+Then a stored procedure performs permission checks.
+
+Example:
+
+```sql
+EXEC sp_CheckPermission
+     @UserID=25,
+     @Permission='ExportCSV'
+```
+
+Returns:
+
+```
+True
+```
+
+or
+
+```
+False
+```
+
+---
+
+# Recommended Architecture for a Query Builder
+
+```
+React
+
+↓
+
+Node.js
+
+↓
+
+Authorization Service
+      │
+      ├── Dataset Permission
+      ├── Column Permission
+      ├── Feature Permission
+      └── Row Filters
+
+↓
+
+Stored Procedures
+
+↓
+
+SQL Server
+      │
+      ├── Database Roles
+      ├── Row-Level Security
+      ├── Column Permissions
+      └── Audit Tables
+```
+
+---
+
+# Why Not Let SQL Server Handle Everything?
+
+Suppose the user requests:
+
+```
+Stacked Bar Chart
+
+Dataset:
+Sales
+
+X:
+Region
+
+Y:
+Revenue
+
+Filters:
+Year=2025
+```
+
+The backend still needs to:
+
+* Validate the request format.
+* Build a parameterized query.
+* Apply business rules.
+* Format the results for the chart.
+* Log the action.
+* Return JSON to React.
+
+Those responsibilities belong in the application layer. SQL Server excels at **protecting data**, but it does not understand higher-level concepts such as dashboards, chart types, or UI features.
+
+---
+
+# My Recommendation
+
+For an enterprise analytics platform, I recommend:
+
+| Layer      | Responsibility                                                                                                                 |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| React      | Hide unavailable UI elements and improve user experience (not security)                                                        |
+| Node.js    | Authenticate users, enforce dataset, column, feature, and business-rule authorization                                          |
+| SQL Server | Enforce least privilege with stored procedures, database roles, Row-Level Security, and, where appropriate, column permissions |
+
+This layered approach is known as **defense in depth**. Even if an application bug allows an unauthorized request to reach the database, SQL Server still enforces its own security policies, reducing the risk of data exposure.
+
+
+
