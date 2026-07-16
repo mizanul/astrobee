@@ -124,33 +124,19 @@ This allows:
 User opens
 
 https://env1.company.com
-
 ↓
-
 React checks login
-
 ↓
-
 Redirect to Keycloak
-
 ↓
-
 User authenticates
-
 ↓
-
 Keycloak creates SSO session
-
 ↓
-
 Returns JWT
-
 ↓
-
 React stores Access Token
-
 ↓
-
 Calls Node API
 ```
 
@@ -181,30 +167,18 @@ Browser
 
 Access Token
 Refresh Token
-
 ↓
-
 React
-
 ↓
-
 Authorization:
 Bearer eyJhbGciOi...
-
 ↓
-
 Node.js
-
 ↓
-
 JWT Validation
-
 ↓
-
 Cube API
-
 ↓
-
 SQL
 ```
 
@@ -222,29 +196,17 @@ Example middleware:
 
 ```javascript
 Bearer Token
-
 ↓
-
 Verify Signature
-
 ↓
-
 Verify Issuer
-
 ↓
-
 Verify Audience
-
 ↓
-
 Verify Expiration
-
 ↓
-
 Extract Roles
-
 ↓
-
 Authorize
 ```
 
@@ -256,25 +218,15 @@ Cube should also validate JWTs.
 
 ```
 React
-
 ↓
-
 Node
-
 ↓
-
 Cube API
-
 ↓
-
 Verify JWT
-
 ↓
-
 Apply Security Context
-
 ↓
-
 SQL
 ```
 
@@ -288,21 +240,13 @@ SQL Server should **not** authenticate users directly.
 
 ```
 React
-
 ↓
-
 Node
-
 ↓
-
 Cube
-
 ↓
-
 Stored Procedure
-
 ↓
-
 SQL
 ```
 
@@ -385,25 +329,15 @@ Example
 
 ```
 User
-
 ↓
-
 Keycloak
-
 ↓
-
 Role
-
 ↓
-
 Node
-
 ↓
-
 Permission Service
-
 ↓
-
 SQL
 ```
 
@@ -429,17 +363,11 @@ Same idea.
 
 ```
 Dataset
-
 ↓
-
 Allowed Columns
-
 ↓
-
 Cube
-
 ↓
-
 Visible Columns
 ```
 
@@ -503,17 +431,11 @@ Keycloak is external.
 Docker Network
 
 React
-
 ↓
-
 Node
-
 ↓
-
 Cube
-
 ↓
-
 SQL
 ```
 
@@ -523,29 +445,17 @@ SQL
 
 ```
 Internet
-
 ↓
-
 Load Balancer
-
 ↓
-
 NGINX
-
 ↓
-
 React
-
 ↓
-
 Node
-
 ↓
-
 Cube
-
 ↓
-
 SQL
 ```
 
