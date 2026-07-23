@@ -11,11 +11,11 @@ However, there are several improvements I would recommend before considering thi
 
 # README.md
 
-# SDA Architecture
+# AVOID Architecture
 
 ## Overview
 
-SDA is a containerized analytics platform built using Docker Compose.
+AVOID is a containerized analytics platform built using Docker Compose.
 
 The platform consists of five major layers:
 
@@ -231,7 +231,7 @@ Supports
 All services communicate using an internal Docker bridge network.
 
 ```
-sda-network
+AVOID-network
 ```
 
 Only these ports are exposed externally.
