@@ -877,3 +877,530 @@ In production, only the reverse proxy should be exposed to the Internet. Interna
 
 This architecture follows common enterprise patterns by separating identity management (Keycloak), application logic (Backend), and analytics (Cube), making the system more secure, scalable, and easier to integrate with corporate identity providers.
 
+
+
+
+=================================TESTING=========================
+
+Given your architecture (React + Backend + Keycloak + Cube + PostgreSQL + Metabase), I would implement **integration testing in layers**, not just end-to-end browser tests. This makes failures easier to diagnose and provides better coverage.
+
+## Testing Pyramid
+
+```text
+                    Manual UI Tests
+                          ▲
+                    End-to-End Tests
+                          ▲
+                  Integration Tests
+                          ▲
+                     Unit Tests
+```
+
+The majority of your effort should be in **integration tests**.
+
+---
+
+# Overall Integration Test Architecture
+
+```text
+                  Test Runner (GitHub Actions / Jenkins)
+
+                              │
+
+      ┌───────────────────────┼────────────────────────┐
+
+      ▼                       ▼                        ▼
+
+ Authentication         Backend API             Analytics
+
+(Keycloak)              (REST API)            (Cube API)
+
+      │                       │                        │
+
+      └──────────────┬────────┴──────────────┬─────────┘
+                     ▼                       ▼
+               PostgreSQL              Cube Store
+```
+
+---
+
+# Layer 1 — Infrastructure Tests
+
+Verify all containers are healthy before running application tests.
+
+Example checks:
+
+```bash
+docker compose ps
+
+docker compose exec postgres pg_isready
+
+curl http://backend:3001/health
+
+curl http://cube-api:4000/readyz
+
+curl http://keycloak:8080/health
+
+curl http://web
+```
+
+Expected:
+
+* All containers running
+* Healthy status
+* Network connectivity
+
+---
+
+# Layer 2 — Authentication Tests
+
+Test Keycloak integration.
+
+### Test cases
+
+✓ Login with valid user
+
+✓ Invalid password
+
+✓ Expired token
+
+✓ Refresh token
+
+✓ Logout
+
+✓ Role assignment
+
+✓ Federated login
+
+Example flow
+
+```text
+React
+
+↓
+
+Keycloak
+
+↓
+
+JWT
+
+↓
+
+Backend validates JWT
+
+↓
+
+200 OK
+```
+
+---
+
+# Layer 3 — Backend API Tests
+
+Instead of testing the UI, directly test REST APIs.
+
+Example
+
+```http
+POST /login
+
+GET /api/dashboard
+
+GET /api/reports
+
+POST /api/query
+```
+
+Verify
+
+* HTTP status
+* JSON schema
+* Authorization
+* Validation
+* Error handling
+
+Tools
+
+* pytest
+* requests
+* Postman/Newman
+* Bruno
+* Karate
+
+---
+
+# Layer 4 — Database Integration
+
+Run tests that verify:
+
+Backend
+
+↓
+
+PostgreSQL
+
+Example
+
+```python
+Create User
+
+↓
+
+Query Database
+
+↓
+
+Verify row exists
+```
+
+Test
+
+* CRUD
+* Transactions
+* Rollback
+* Constraints
+
+---
+
+# Layer 5 — Cube Integration
+
+Test the analytics layer.
+
+Example
+
+```text
+Backend
+
+↓
+
+Cube
+
+↓
+
+SQL Generated
+
+↓
+
+PostgreSQL
+
+↓
+
+Results
+```
+
+Verify
+
+* Correct dimensions
+* Measures
+* Time filters
+* Row-level security
+* Aggregations
+* Performance
+
+---
+
+# Layer 6 — Security Tests
+
+Very important.
+
+Examples
+
+No JWT
+
+```
+Expected
+
+401
+```
+
+Invalid JWT
+
+```
+Expected
+
+401
+```
+
+Wrong role
+
+```
+Expected
+
+403
+```
+
+Attempt SQL injection
+
+```
+Expected
+
+Blocked
+```
+
+Expired token
+
+```
+Expected
+
+401
+```
+
+---
+
+# Layer 7 — End-to-End Tests
+
+Use Playwright.
+
+Scenario:
+
+```text
+Open browser
+
+↓
+
+Login
+
+↓
+
+Dashboard loads
+
+↓
+
+Select report
+
+↓
+
+Backend
+
+↓
+
+Cube
+
+↓
+
+Postgres
+
+↓
+
+Chart displayed
+```
+
+This verifies the complete application stack.
+
+---
+
+# Layer 8 — Performance Tests
+
+Use tools like **k6**, **JMeter**, or **Locust**.
+
+Example
+
+```text
+100 Users
+
+↓
+
+Login
+
+↓
+
+Open dashboard
+
+↓
+
+Run report
+
+↓
+
+Logout
+```
+
+Measure
+
+* Response time
+* Throughput
+* CPU
+* Memory
+* Database load
+
+---
+
+# Layer 9 — Failure Tests
+
+Simulate failures.
+
+Examples
+
+Stop Cube
+
+```bash
+docker stop sda-cube-api
+```
+
+Expected
+
+Backend returns
+
+```
+503 Service Unavailable
+```
+
+Stop PostgreSQL
+
+Expected
+
+Graceful error
+
+Restart Keycloak
+
+Verify
+
+* Existing sessions
+* Token refresh
+
+---
+
+# Layer 10 — Regression Tests
+
+Every pull request should automatically execute:
+
+```text
+Build Containers
+
+↓
+
+Seed Database
+
+↓
+
+Infrastructure Tests
+
+↓
+
+Authentication Tests
+
+↓
+
+Backend Tests
+
+↓
+
+Cube Tests
+
+↓
+
+Playwright Tests
+
+↓
+
+Performance Smoke Test
+
+↓
+
+Publish Report
+```
+
+---
+
+# Example CI Pipeline
+
+```text
+GitHub Actions
+
+        │
+
+        ▼
+
+docker compose up
+
+        │
+
+        ▼
+
+Run Seed
+
+        │
+
+        ▼
+
+Pytest
+
+        │
+
+        ▼
+
+Playwright
+
+        │
+
+        ▼
+
+Coverage
+
+        │
+
+        ▼
+
+Artifacts
+
+        │
+
+        ▼
+
+Deploy
+```
+
+---
+
+# Recommended Project Structure
+
+```text
+tests/
+│
+├── unit/
+│
+├── integration/
+│   ├── auth/
+│   ├── backend/
+│   ├── cube/
+│   ├── database/
+│   └── keycloak/
+│
+├── e2e/
+│   ├── playwright/
+│   └── cypress/
+│
+├── performance/
+│   ├── k6/
+│   └── locust/
+│
+├── security/
+│   ├── jwt/
+│   ├── roles/
+│   └── injection/
+│
+└── fixtures/
+```
+
+---
+
+## Recommendation for Your Architecture
+
+Given your stack, I recommend the following toolset:
+
+| Layer                  | Recommended Tool                                          |
+| ---------------------- | --------------------------------------------------------- |
+| Unit Testing           | pytest (backend), Jest (React)                            |
+| API Integration        | pytest + requests (or httpx)                              |
+| Authentication         | Keycloak test realm + pytest                              |
+| Database               | pytest + PostgreSQL test database                         |
+| Cube                   | Cube API integration tests using authenticated API calls  |
+| UI End-to-End          | Playwright                                                |
+| Performance            | k6                                                        |
+| Security               | OWASP ZAP for automated scans, plus custom JWT/RBAC tests |
+| Continuous Integration | GitHub Actions, GitLab CI, or Jenkins with Docker Compose |
+
+This approach provides comprehensive coverage of your entire stack—from Keycloak authentication through the backend and Cube semantic layer to PostgreSQL—while keeping tests maintainable and fast enough to run automatically in your CI/CD pipeline.
+
+
