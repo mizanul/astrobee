@@ -575,4 +575,305 @@ For a production deployment, I'd recommend the following overall layout:
                          PostgreSQL
 ```
 
-This architecture improves security by exposing only the reverse proxy, improves scalability by using Redis for distributed caching and queueing, and makes the system easier to monitor and operate as it grows.
+=================================
+
+
+
+Adding **Keycloak** is a very good architectural choice. It centralizes authentication, supports Single Sign-On (SSO), and enables federation with enterprise identity providers (Microsoft Entra ID, Google, GitHub, LDAP, Active Directory, SAML, etc.). Your backend no longer needs to manage passwords or issue its own login sessions.
+
+I would update the architecture as follows.
+
+# Updated Architecture
+
+```text
+                           Internet
+                               │
+                               ▼
+                      Nginx / Reverse Proxy
+                               │
+             ┌─────────────────┴─────────────────┐
+             │                                   │
+             ▼                                   ▼
+        React Web                          Keycloak
+             │                          Identity Provider
+             │                     (OIDC / OAuth2 / SAML)
+             │                                   │
+             │                                   ▼
+             │                     External Identity Providers
+             │                ┌─────────────┬─────────────┐
+             │                │             │             │
+             │                ▼             ▼             ▼
+             │          Microsoft Entra   Google      LDAP/AD
+             │             GitHub         Okta        SAML IdP
+             │
+             │ Access Token (JWT)
+             ▼
+        Backend API
+             │
+      Validate JWT
+             │
+             ▼
+       Generate Cube JWT
+             │
+             ▼
+         Cube API
+        Semantic Layer
+             │
+      ┌──────┴────────┐
+      │               │
+      ▼               ▼
+Cube Refresh      Redis Cache
+   Worker         & Queue
+      │               │
+      └──────┬────────┘
+             ▼
+        Cube Store
+             │
+             ▼
+        PostgreSQL
+```
+
+---
+
+# Authentication Flow
+
+```text
+User
+
+ │
+
+ ▼
+
+React Application
+
+ │
+
+ ▼
+
+Redirect to Keycloak
+
+ │
+
+ ▼
+
+Login Screen
+
+ │
+
+ ▼
+
+Federated Identity Provider
+(Google / Microsoft / LDAP / SAML)
+
+ │
+
+ ▼
+
+Keycloak
+
+ │
+
+ ▼
+
+OIDC Access Token (JWT)
+
+ │
+
+ ▼
+
+React
+
+ │
+
+ ▼
+
+Backend API
+
+ │
+
+Verify Token
+
+ │
+
+Map Roles
+
+ │
+
+Generate Cube Token
+
+ │
+
+▼
+
+Cube API
+
+ │
+
+▼
+
+PostgreSQL
+```
+
+---
+
+# Responsibilities
+
+## Keycloak
+
+Authentication server.
+
+Responsibilities
+
+* User authentication
+* Single Sign-On (SSO)
+* OAuth2
+* OpenID Connect (OIDC)
+* SAML
+* Multi-factor authentication (MFA)
+* Password policies
+* User management
+* Identity federation
+* Token issuance
+* Refresh token management
+* Role and group management
+
+Keycloak becomes the **single source of identity** for the platform.
+
+---
+
+## React Web
+
+Responsibilities
+
+* Redirect users to Keycloak for login.
+* Store access and refresh tokens securely (preferably using Authorization Code Flow with PKCE).
+* Attach the access token to every backend API request.
+* Never communicate directly with PostgreSQL or Cube.
+
+---
+
+## Backend API
+
+Responsibilities
+
+* Validate Keycloak JWTs using Keycloak's public keys (JWKS).
+* Map Keycloak roles/groups to application permissions.
+* Apply business authorization (RBAC/ABAC).
+* Generate short-lived Cube JWTs for the authenticated user.
+* Expose REST APIs to the frontend.
+
+The backend should **not** authenticate users itself or store passwords.
+
+---
+
+## Cube API
+
+Responsibilities
+
+* Accept only trusted Cube JWTs issued by the backend.
+* Enforce row-level security based on claims.
+* Generate SQL against PostgreSQL.
+* Cache analytical queries.
+
+---
+
+# Token Flow
+
+```text
++------------------+
+|    Keycloak      |
+| Access JWT       |
++------------------+
+          │
+          ▼
++------------------+
+| Backend API      |
+| Verify JWT       |
+| Authorize User   |
++------------------+
+          │
+          ▼
++------------------+
+| Cube JWT         |
+| Short-lived      |
++------------------+
+          │
+          ▼
++------------------+
+| Cube API         |
++------------------+
+```
+
+This separation is important because your Cube API secret remains internal, and the browser never receives it.
+
+---
+
+# Federated Login
+
+Keycloak supports integration with multiple external identity providers, allowing users to authenticate with existing organizational or social accounts.
+
+Examples include:
+
+* Microsoft Entra ID (Azure AD)
+* Google Workspace
+* GitHub
+* LDAP / Active Directory
+* SAML 2.0 Identity Providers
+* Okta
+* Auth0
+
+This enables organizations to use their existing credentials without creating separate accounts in your application.
+
+---
+
+# Role-Based Authorization
+
+A recommended role hierarchy is:
+
+```text
+Realm
+ ├── Super Admin
+ ├── Administrator
+ ├── Analyst
+ ├── Data Engineer
+ ├── Manager
+ ├── Viewer
+ └── Guest
+```
+
+Your backend can translate these roles into application-specific permissions and Cube security context for row-level and feature-level authorization.
+
+---
+
+# Production Deployment
+
+In production, only the reverse proxy should be exposed to the Internet. Internal services, including Keycloak, Backend, Cube API, Redis, Cube Store, and PostgreSQL, should communicate over the private Docker network.
+
+```text
+                    Internet
+                        │
+                        ▼
+                 Nginx (HTTPS)
+                        │
+     ┌──────────────────┼──────────────────┐
+     │                  │                  │
+     ▼                  ▼                  ▼
+ React Web         Backend API         Keycloak
+                          │
+                          ▼
+                    Cube API
+                          │
+                ┌─────────┴─────────┐
+                ▼                   ▼
+             Redis             Cube Worker
+                │                   │
+                └─────────┬─────────┘
+                          ▼
+                     Cube Store
+                          │
+                          ▼
+                     PostgreSQL
+```
+
+This architecture follows common enterprise patterns by separating identity management (Keycloak), application logic (Backend), and analytics (Cube), making the system more secure, scalable, and easier to integrate with corporate identity providers.
+
