@@ -493,3 +493,442 @@ In this design:
 * Backend services perform fine-grained authorization (roles, scopes, resource ownership) but do not need to revalidate token signatures if the gateway is your trusted enforcement point. For defense in depth, many organizations also validate JWTs in each service.
 
 This architecture gives a centralized identity management, consistent JWT issuance, support for multiple security levels, and a clean separation between authentication, authorization, and application logic. It also scales well if you later add mobile apps, partner portals, or additional microservices.
+
+
+
+
+## Implementation
+
+A clean enterprise architecture is to keep **React responsible only for UI and authentication state**, while **server.js** owns the authentication flow with Keycloak and the corporate IdP.
+
+The flow should look like this:
+
+```
++-------------------+
+| React             |
+|-------------------|
+| ThemeProvider     |
+| AuthProvider      |
+| AppLayout         |
+| AppContent        |
++---------+---------+
+          |
+          | REST
+          |
++---------v------------------+
+| server.js (Express)        |
+|----------------------------|
+| Passport/OpenID Connect    |
+| Session/JWT                |
+| Authorization              |
++---------+------------------+
+          |
+          |
+    +-----+------+
+    |            |
++---v----+   +---v----------------+
+|Keycloak|   |Corporate IdP       |
+|Broker  |   |Azure AD/Okta/ADFS  |
++--------+   +--------------------+
+```
+
+This keeps all OpenID Connect secrets away from React.
+
+---
+
+# Folder structure
+
+```
+src/
+    App.tsx
+    index.tsx
+
+    auth/
+        AuthContext.tsx
+        AuthProvider.tsx
+        PrivateRoute.tsx
+        types.ts
+        authApi.ts
+
+    components/
+        AppLayout.tsx
+        AppContent.tsx
+```
+
+---
+
+# Auth Types
+
+**auth/types.ts**
+
+```typescript
+export interface User {
+    id: string;
+    username: string;
+    fullName: string;
+    email: string;
+
+    roles: string[];
+
+    authenticated: boolean;
+}
+
+export interface AuthContextType {
+
+    user: User | null;
+
+    loading: boolean;
+
+    login: () => void;
+
+    logout: () => void;
+
+    refresh: () => Promise<void>;
+
+    hasRole: (role: string) => boolean;
+}
+```
+
+---
+
+# API
+
+**auth/authApi.ts**
+
+```typescript
+export async function getCurrentUser() {
+
+    const response = await fetch("/api/auth/me", {
+        credentials: "include"
+    });
+
+    if (response.status === 401)
+        return null;
+
+    return await response.json();
+}
+```
+
+---
+
+# Auth Context
+
+**AuthContext.tsx**
+
+```typescript
+import { createContext } from "react";
+import { AuthContextType } from "./types";
+
+export const AuthContext = createContext<AuthContextType>(
+    {} as AuthContextType
+);
+```
+
+---
+
+# Auth Provider
+
+**AuthProvider.tsx**
+
+```typescript
+import React, {
+    useState,
+    useEffect,
+    useCallback
+} from "react";
+
+import { AuthContext } from "./AuthContext";
+import { User } from "./types";
+import { getCurrentUser } from "./authApi";
+
+interface Props {
+    children: React.ReactNode;
+}
+
+const LOGIN_URL = "/api/auth/login";
+const LOGOUT_URL = "/api/auth/logout";
+
+export const AuthProvider: React.FC<Props> = ({ children }) => {
+
+    const [user, setUser] = useState<User | null>(null);
+
+    const [loading, setLoading] = useState(true);
+
+    const refresh = useCallback(async () => {
+
+        setLoading(true);
+
+        const me = await getCurrentUser();
+
+        setUser(me);
+
+        setLoading(false);
+
+    }, []);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    const login = () => {
+
+        window.location.href = LOGIN_URL;
+
+    };
+
+    const logout = () => {
+
+        window.location.href = LOGOUT_URL;
+
+    };
+
+    const hasRole = (role: string) => {
+
+        return user?.roles.includes(role) ?? false;
+
+    };
+
+    return (
+
+        <AuthContext.Provider
+            value={{
+                user,
+                loading,
+                login,
+                logout,
+                refresh,
+                hasRole
+            }}
+        >
+
+            {children}
+
+        </AuthContext.Provider>
+
+    );
+
+};
+```
+
+---
+
+# Hook
+
+```typescript
+import { useContext } from "react";
+import { AuthContext } from "./AuthContext";
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+---
+
+# Private Route
+
+```typescript
+import React from "react";
+import { useAuth } from "./useAuth";
+
+interface Props {
+    children: React.ReactNode;
+}
+
+export const PrivateRoute: React.FC<Props> = ({ children }) => {
+
+    const auth = useAuth();
+
+    if (auth.loading)
+        return <div>Loading...</div>;
+
+    if (!auth.user) {
+
+        auth.login();
+
+        return null;
+    }
+
+    return <>{children}</>;
+};
+```
+
+---
+
+# App.tsx
+
+```tsx
+import { ThemeProvider } from "./theme";
+import { AuthProvider } from "./auth/AuthProvider";
+import { PrivateRoute } from "./auth/PrivateRoute";
+
+import AppLayout from "./components/AppLayout";
+import AppContent from "./components/AppContent";
+
+const App: React.FC = () => {
+
+    return (
+
+        <ThemeProvider>
+
+            <AuthProvider>
+
+                <PrivateRoute>
+
+                    <AppLayout>
+
+                        <AppContent />
+
+                    </AppLayout>
+
+                </PrivateRoute>
+
+            </AuthProvider>
+
+        </ThemeProvider>
+
+    );
+
+};
+
+export default App;
+```
+
+---
+
+# Login Button
+
+```tsx
+import { useAuth } from "../auth/useAuth";
+
+export default function LoginButton() {
+
+    const auth = useAuth();
+
+    if (auth.user) {
+
+        return (
+
+            <button onClick={auth.logout}>
+                Logout
+            </button>
+
+        );
+
+    }
+
+    return (
+
+        <button onClick={auth.login}>
+            Login
+        </button>
+
+    );
+
+}
+```
+
+---
+
+# Server.js API
+
+Your React application never talks directly to Keycloak.
+
+```
+GET  /api/auth/login
+```
+
+Redirects to
+
+```
+Keycloak
+```
+
+Keycloak lets the user choose
+
+```
+Corporate Login
+
+or
+
+Local Login
+```
+
+After login
+
+```
+Keycloak
+    ↓
+server.js callback
+
+/api/auth/callback
+```
+
+server.js creates
+
+```
+HTTP Only Cookie
+
+or
+
+JWT Cookie
+```
+
+React then calls
+
+```
+GET /api/auth/me
+```
+
+Example response:
+
+```json
+{
+    "id":"123",
+    "username":"john",
+    "fullName":"John Smith",
+    "email":"john@company.com",
+    "roles":[
+        "Admin",
+        "Report.View"
+    ],
+    "authenticated":true
+}
+```
+
+---
+
+# Authorization
+
+Once the authenticated user is available, authorization is straightforward:
+
+```tsx
+const auth = useAuth();
+
+if (auth.hasRole("Admin")) {
+    return <AdminPage />;
+}
+
+return <AccessDenied />;
+```
+
+or
+
+```tsx
+{auth.hasRole("Report.View") && (
+    <ReportMenu />
+)}
+```
+
+---
+
+## Recommended production architecture
+
+Since you've indicated that your backend middleware (`server.js` in TypeScript) will manage both authentication and authorization, I recommend **not** using the Keycloak JavaScript adapter in React. Instead:
+
+* React is a thin client that only knows whether a user is authenticated and what roles/permissions have been granted.
+* `server.js` handles the full OpenID Connect Authorization Code Flow with PKCE, exchanges tokens with Keycloak, validates them, and stores only a secure, HTTP-only session cookie.
+* `server.js` exposes endpoints such as `/api/auth/login`, `/api/auth/callback`, `/api/auth/logout`, and `/api/auth/me`.
+* Keycloak is configured as an identity broker so users can authenticate with either local Keycloak accounts or a federated corporate IdP (such as Azure AD, Okta, or ADFS). React does not need to know which identity provider the user chose.
+* All application APIs go through `server.js`, which performs role and permission checks before accessing downstream services such as your Cube API or databases.
+
+This architecture scales well for enterprise applications because it centralizes security concerns, keeps tokens out of the browser, and makes it easy to support multiple identity providers without changing the React application.
+
