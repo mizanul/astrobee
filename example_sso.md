@@ -1,3 +1,113 @@
+
+Here is a UML sequence diagram using **Mermaid** syntax that describes the interaction between the React SDA application, the backend `server.js`, Cube API, and the database.
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor User
+    participant React as React SDA App<br/>(http://localhost:2574)
+    participant Backend as Node.js server.js
+    participant Cube as Cube API
+    participant DB as Database
+
+    User->>React: Browse to http://localhost:2574
+
+    React-->>User: Display SDA Application
+
+    User->>React: Build Query
+    User->>React: Select "Stacked Bar Chart"
+
+    React->>Backend: Request JWT
+    Backend-->>React: Return JWT
+
+    React->>Cube: Build Query + JWT
+    Note over React,Cube: JWT included in Authorization header
+
+    Cube->>Cube: Validate JWT
+
+    alt JWT is valid
+        Cube->>DB: Execute SQL query
+        DB-->>Cube: Return query result
+        Cube-->>React: JSON dataset
+        React->>React: Transform API response
+        React-->>User: Display Stacked Bar Chart
+    else JWT is invalid
+        Cube-->>React: 401 Unauthorized
+        React-->>User: Display authentication error
+    end
+```
+
+### Architecture Flow
+
+```text
++--------+
+|  User  |
++--------+
+     |
+     v
++-----------------------------+
+| React SDA App               |
+| http://localhost:2574       |
++-----------------------------+
+      |              ^
+      | JWT Request  | Chart Data
+      v              |
++-----------------------------+
+| Node.js Backend (server.js) |
+| Authentication Service      |
++-----------------------------+
+      |
+      | JWT
+      v
++-----------------------------+
+| Cube API                    |
+| - Validate JWT              |
+| - Execute Analytical Query  |
++-----------------------------+
+      |
+      v
++-----------------------------+
+| Database (MS SQL Server)    |
++-----------------------------+
+```
+
+This sequence follows a common analytics architecture:
+
+1. User opens the React SDA application.
+2. User builds a query and selects **Stacked Bar Chart**.
+3. React requests a JWT from `server.js`.
+4. `server.js` authenticates the user and returns a JWT.
+5. React sends the analytical query to Cube API with the JWT in the `Authorization` header.
+6. Cube validates the JWT.
+7. If valid, Cube generates SQL and queries the database.
+8. The database returns the requested data.
+9. Cube returns the data as JSON to React.
+10. React transforms the response into the format required by the chart component (e.g., Recharts) and renders the **Stacked Bar Chart**.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Keycloak is a good fit for this architecture because it separates **authentication** from your applications while allowing you to broker identities from your company's existing Identity Provider (IdP). Your applications never need to know how users are authenticated—they only trust Keycloak.
 
 
