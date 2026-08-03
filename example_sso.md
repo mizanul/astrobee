@@ -90,6 +90,167 @@ This sequence follows a common analytics architecture:
 
 
 
+## Future Authentication Flow
+
+Your proposed architecture is a good evolution because it separates **authentication** from the general backend services. The `AuthenticationService.js` becomes the identity broker between Keycloak/LDAP and your application, while **Cube** performs authorization using the JWT claims without needing to call another service.
+
+Below is an updated sequence diagram.
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    actor User
+    actor ExternalApp as External Application
+
+    participant React as React SDA App
+    participant Auth as AuthenticationService.js
+    participant Keycloak as IS Keycloak (OIDC)
+    participant LDAP as LDAP Directory
+    participant DB as Application Database
+    participant Cube as Cube API
+
+    %% -------------------------
+    %% User Login Flow
+    %% -------------------------
+    User->>React: Browse to http://localhost:2574
+    React-->>User: Display Login Page
+
+    User->>React: Enter Username & Password
+    React->>Auth: Login Request (OIDC Credentials)
+
+    Auth->>Keycloak: Authenticate via OIDC
+    Keycloak->>LDAP: Validate Username & Password
+    LDAP-->>Keycloak: Authentication Result
+    Keycloak-->>Auth: Authentication Success
+
+    Auth->>DB: Retrieve User Profile, Roles, Permissions
+    DB-->>Auth: User Information
+
+    Auth->>Auth: Generate JWT using Private Key\n(Add claims: userId, roles,\ndatasets, permissions, tenant, etc.)
+
+    Auth-->>React: Signed JWT
+
+    %% -------------------------
+    %% Query Execution
+    %% -------------------------
+    User->>React: Build Query
+    User->>React: Select Stacked Bar Chart
+
+    React->>Cube: Query + JWT
+    Note over React,Cube: JWT in Authorization Header
+
+    Cube->>Cube: Validate JWT using Public Key
+    Cube->>Cube: Read Claims for Authorization
+
+    alt JWT Valid
+        Cube->>DB: Generate SQL based on Claims
+        DB-->>Cube: Query Result
+        Cube-->>React: JSON Dataset
+        React->>React: Transform API Response
+        React-->>User: Display Stacked Bar Chart
+    else Invalid JWT
+        Cube-->>React: 401 Unauthorized
+        React-->>User: Authentication Error
+    end
+
+    %% -------------------------
+    %% External Application Flow
+    %% -------------------------
+    ExternalApp->>Auth: Request JWT (API Key)
+    Auth->>DB: Validate API Key
+    DB-->>Auth: Application Identity & Permissions
+
+    Auth->>Auth: Generate JWT using Private Key\n(App Claims)
+
+    Auth-->>ExternalApp: Signed JWT
+
+    ExternalApp->>Cube: API Request + JWT
+    Cube->>Cube: Validate JWT using Public Key
+    Cube->>Cube: Authorize Using Claims
+    Cube->>DB: Execute Authorized Query
+    DB-->>Cube: Results
+    Cube-->>ExternalApp: JSON Response
+```
+
+## Overall Architecture
+
+```text
+                        +---------------------+
+                        |      LDAP           |
+                        +----------+----------+
+                                   ^
+                                   |
+                          User Authentication
+                                   |
+                        +----------+----------+
+                        | IS Keycloak (OIDC) |
+                        +----------+----------+
+                                   ^
+                                   |
+                    OIDC Authentication Flow
+                                   |
+                    +--------------+--------------+
+                    | AuthenticationService.js    |
+                    |-----------------------------|
+                    | • Login API                 |
+                    | • OIDC Client               |
+                    | • API Key Authentication    |
+                    | • Load User Permissions     |
+                    | • Create Signed JWT         |
+                    |   (Private Key)             |
+                    +--------------+--------------+
+                                   |
+                +------------------+------------------+
+                |                                     |
+          JWT to React                         JWT to External Apps
+                |                                     |
+                +------------------+------------------+
+                                   |
+                                   v
+                           +-------+-------+
+                           |   Cube API    |
+                           |---------------|
+                           | Verify JWT    |
+                           | (Public Key)  |
+                           | Authorization |
+                           | Build SQL     |
+                           +-------+-------+
+                                   |
+                                   v
+                          +--------+--------+
+                          | Application DB  |
+                          | Users           |
+                          | Roles           |
+                          | API Keys        |
+                          | Business Data   |
+                          +-----------------+
+```
+
+## Security Advantages
+
+This design follows a modern stateless authorization model:
+
+* **Authentication** is handled only by **Keycloak** using OIDC and LDAP.
+* **AuthenticationService.js** acts as your trusted token issuer. It enriches the authenticated identity with application-specific information (roles, dataset permissions, tenant, feature permissions, API permissions, etc.) from your database.
+* JWTs are **signed with your private key**.
+* Cube API never needs to contact Keycloak or your database to validate identity; it only verifies the JWT signature using the **public key** and reads the embedded claims.
+* Authorization decisions (row-level, dataset-level, tenant-level, feature-level, and column-level access) are driven entirely by the JWT claims.
+* External applications authenticate with an **API key**, receive a JWT containing only the permissions granted to that application, and then interact with Cube API in the same way as the React client.
+
+This architecture cleanly separates responsibilities:
+
+| Component                | Responsibility                                                              |
+| ------------------------ | --------------------------------------------------------------------------- |
+| React                    | UI, login, query builder, chart rendering                                   |
+| AuthenticationService.js | Authentication orchestration, user lookup, API key validation, JWT issuance |
+| Keycloak                 | Identity provider (OIDC)                                                    |
+| LDAP                     | Credential validation                                                       |
+| Application Database     | User profiles, roles, permissions, API keys, business data                  |
+| Cube API                 | JWT validation, authorization, SQL generation                               |
+| MS SQL Server            | Data storage                                                                |
+
+This separation is scalable and aligns well with enterprise security practices based on OIDC, asymmetric JWT signing, and claim-based authorization.
 
 
 
