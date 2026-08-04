@@ -482,3 +482,138 @@ For your exploration, I would produce a short design document with:
    * Persist logs in a backend database in Phase 3 through a `/api/logs` endpoint.
 
 This approach is clean, extensible, and minimizes future refactoring because the UI components remain unaware of where logs are ultimately stored.
+
+
+
+
+
+=============================================
+
+For a logging service, I would **not** implement it as `React.FC`. A logging service is not a UI component, so it should be a plain TypeScript module or class. `React.FC` is intended for components that render JSX.
+
+A recommended implementation is:
+
+```tsx
+// src/services/LoggingService.ts
+
+export enum LogEvent {
+  FILTER_CREATED = "FILTER_CREATED",
+  FILTER_UPDATED = "FILTER_UPDATED",
+  FILTER_REMOVED = "FILTER_REMOVED",
+  FILTERS_CLEARED = "FILTERS_CLEARED",
+  QUERY_GENERATED = "QUERY_GENERATED",
+  QUERY_EXECUTION_STARTED = "QUERY_EXECUTION_STARTED",
+  QUERY_EXECUTION_COMPLETED = "QUERY_EXECUTION_COMPLETED",
+  QUERY_EXECUTION_FAILED = "QUERY_EXECUTION_FAILED",
+}
+
+export interface LogEntry {
+  event: LogEvent;
+  message?: string;
+  data?: Record<string, unknown>;
+}
+
+class LoggingService {
+  public log(entry: LogEntry): void {
+    console.log({
+      timestamp: new Date().toISOString(),
+      event: entry.event,
+      message: entry.message,
+      data: entry.data,
+    });
+  }
+
+  public info(message: string, data?: Record<string, unknown>): void {
+    this.log({
+      event: LogEvent.QUERY_GENERATED,
+      message,
+      data,
+    });
+  }
+
+  public error(message: string, data?: Record<string, unknown>): void {
+    console.error({
+      timestamp: new Date().toISOString(),
+      message,
+      data,
+    });
+  }
+}
+
+export default new LoggingService();
+```
+
+Usage:
+
+```tsx
+import LoggingService, { LogEvent } from "../services/LoggingService";
+
+LoggingService.log({
+  event: LogEvent.FILTER_CREATED,
+  message: "User added a filter",
+  data: {
+    field: "Country",
+    operator: "=",
+    value: "USA",
+  },
+});
+```
+
+---
+
+### If your team specifically asked for a `React.FC`
+
+Although it's not recommended for a service, you could wrap the service in a React Context provider:
+
+```tsx
+// LoggingService.tsx
+
+import React, { createContext, ReactNode, useContext } from "react";
+
+export interface LoggingContextType {
+  log: (event: string, data?: unknown) => void;
+}
+
+const LoggingContext = createContext<LoggingContextType | null>(null);
+
+export const LoggingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const log = (event: string, data?: unknown) => {
+    console.log({
+      timestamp: new Date().toISOString(),
+      event,
+      data,
+    });
+  };
+
+  return (
+    <LoggingContext.Provider value={{ log }}>
+      {children}
+    </LoggingContext.Provider>
+  );
+};
+
+export const useLogger = (): LoggingContextType => {
+  const context = useContext(LoggingContext);
+
+  if (!context) {
+    throw new Error("useLogger must be used within LoggingProvider");
+  }
+
+  return context;
+};
+```
+
+Then use it in components:
+
+```tsx
+const { log } = useLogger();
+
+log("FILTER_CREATED", {
+  field: "Country",
+  operator: "=",
+  value: "USA",
+});
+```
+
+For your exploration task, I recommend the **first approach (plain `LoggingService.ts`)**. It is simpler, follows common React/TypeScript architecture, and can later be extended to send logs to your Flask backend without changing the calling components.
+
