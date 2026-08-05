@@ -617,3 +617,247 @@ log("FILTER_CREATED", {
 
 For your exploration task, I recommend the **first approach (plain `LoggingService.ts`)**. It is simpler, follows common React/TypeScript architecture, and can later be extended to send logs to your Flask backend without changing the calling components.
 
+
+
+
+
+
+
+
+A good logging schema should be **generic enough to work for any UI event**, not just filtering. The filtering events become one category of log events. This allows the same schema to later log chart creation, dashboard actions, authentication, API calls, etc.
+
+## JSON Schema
+
+```json
+{
+  "id": "uuid",
+  "timestamp": "2026-08-05T17:05:21.123Z",
+
+  "application": {
+    "name": "SDA",
+    "version": "1.0.0",
+    "environment": "development"
+  },
+
+  "session": {
+    "sessionId": "4e5d1f9d-3f1f-44f4-b6c4-0f8d1c0f56ab",
+    "userId": "jsmith",
+    "userName": "John Smith",
+    "role": "Analyst"
+  },
+
+  "page": {
+    "url": "/dashboard",
+    "component": "QueryBuilder",
+    "module": "Filtering"
+  },
+
+  "event": {
+    "category": "FILTER",
+    "action": "FILTER_CREATED",
+    "description": "User created a new filter",
+    "severity": "INFO"
+  },
+
+  "filter": {
+    "filterId": "filter-001",
+    "field": "Country",
+    "operator": "=",
+    "oldValue": null,
+    "newValue": "USA",
+    "filterCount": 3
+  },
+
+  "query": {
+    "generatedQuery": {
+      "filters": [
+        {
+          "member": "Country",
+          "operator": "equals",
+          "values": ["USA"]
+        }
+      ],
+      "measures": [
+        "Sales.count"
+      ]
+    }
+  },
+
+  "execution": {
+    "requestId": "abc-123",
+    "startTime": "2026-08-05T17:05:21.123Z",
+    "endTime": "2026-08-05T17:05:21.845Z",
+    "durationMs": 722,
+    "status": "SUCCESS"
+  },
+
+  "browser": {
+    "name": "Chrome",
+    "version": "138",
+    "platform": "macOS"
+  },
+
+  "error": {
+    "code": null,
+    "message": null,
+    "stackTrace": null
+  },
+
+  "metadata": {
+    "ipAddress": "",
+    "feature": "Query Builder",
+    "notes": ""
+  }
+}
+```
+
+---
+
+# Example 1 - Filter Created
+
+```json
+{
+  "timestamp": "2026-08-05T17:08:30Z",
+  "event": {
+    "category": "FILTER",
+    "action": "FILTER_CREATED",
+    "severity": "INFO"
+  },
+  "filter": {
+    "field": "Country",
+    "operator": "=",
+    "newValue": "USA"
+  }
+}
+```
+
+Console
+
+```
+[2026-08-05 17:08:30]
+
+FILTER_CREATED
+
+Country = USA
+```
+
+---
+
+# Example 2 - Filter Edited
+
+```json
+{
+  "timestamp": "2026-08-05T17:10:15Z",
+  "event": {
+    "category": "FILTER",
+    "action": "FILTER_UPDATED",
+    "severity": "INFO"
+  },
+  "filter": {
+    "field": "Country",
+    "operator": "=",
+    "oldValue": "USA",
+    "newValue": "Canada"
+  }
+}
+```
+
+---
+
+# Example 3 - Filter Removed
+
+```json
+{
+  "timestamp": "2026-08-05T17:11:00Z",
+  "event": {
+    "category": "FILTER",
+    "action": "FILTER_REMOVED",
+    "severity": "INFO"
+  },
+  "filter": {
+    "field": "Country"
+  }
+}
+```
+
+---
+
+# Example 4 - Clear All Filters
+
+```json
+{
+  "timestamp": "2026-08-05T17:12:40Z",
+  "event": {
+    "category": "FILTER",
+    "action": "FILTERS_CLEARED",
+    "severity": "INFO"
+  },
+  "filter": {
+    "filterCount": 7
+  }
+}
+```
+
+---
+
+# Example 5 - Query Generated
+
+```json
+{
+  "timestamp": "2026-08-05T17:13:20Z",
+  "event": {
+    "category": "QUERY",
+    "action": "QUERY_GENERATED"
+  },
+  "query": {
+    "generatedQuery": {
+      "filters": [
+        {
+          "member": "Country",
+          "operator": "equals",
+          "values": [
+            "USA"
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+# Example 6 - Query Execution
+
+```json
+{
+  "timestamp": "2026-08-05T17:14:10Z",
+  "event": {
+    "category": "API",
+    "action": "QUERY_EXECUTION_COMPLETED"
+  },
+  "execution": {
+    "startTime": "2026-08-05T17:14:10.000Z",
+    "endTime": "2026-08-05T17:14:10.652Z",
+    "durationMs": 652,
+    "status": "SUCCESS"
+  }
+}
+```
+
+---
+
+# Recommended Event Types
+
+| Category | Actions                                                                    |
+| -------- | -------------------------------------------------------------------------- |
+| FILTER   | FILTER_CREATED, FILTER_UPDATED, FILTER_REMOVED, FILTERS_CLEARED            |
+| QUERY    | QUERY_GENERATED, QUERY_VALIDATED                                           |
+| API      | QUERY_EXECUTION_STARTED, QUERY_EXECUTION_COMPLETED, QUERY_EXECUTION_FAILED |
+| AUTH     | LOGIN, LOGOUT, SESSION_EXPIRED                                             |
+| CHART    | CHART_CREATED, CHART_UPDATED, CHART_DELETED                                |
+| DATASET  | DATASET_SELECTED, DATASET_CHANGED                                          |
+| SYSTEM   | ERROR, WARNING, INFO, DEBUG                                                |
+
+This schema is scalable: for **Phase 1**, you can log it directly to the browser console as JSON; for **Phase 2**, send the same payload to a backend API; and for **Phase 3**, persist the JSON (or map its fields to relational columns) in your logging database without changing the frontend logging interface.
+
