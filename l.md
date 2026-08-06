@@ -1,3 +1,763 @@
+# Logging Framework Implementation Plan
+
+## React Query Builder / SDA Filtering System
+
+## 1. Overview
+
+This document describes the proposed approach for implementing a scalable logging framework for the SDA React Query Builder application.
+
+The goal is to introduce logging that captures:
+
+* User interactions
+* Application workflow events
+* Query generation activities
+* Backend/API execution lifecycle
+* Errors and failures
+
+The implementation will be introduced incrementally in three phases:
+
+1. **Phase 1: Browser Console Logging**
+
+   * Establish logging architecture
+   * Capture filtering system events
+   * Validate event naming and log structure
+
+2. **Phase 2: Central Logging API**
+
+   * Send logs from frontend to backend
+   * Introduce server-side log processing
+
+3. **Phase 3: Database Persistence and Analytics**
+
+   * Store logs permanently
+   * Enable auditing, troubleshooting, and reporting
+
+---
+
+# 2. Logging Design Principles
+
+The logging architecture follows an approach similar to OpenTelemetry.
+
+The design separates:
+
+### Standard Log Metadata
+
+These fields have a stable schema and will become database columns later.
+
+Example:
+
+```json
+{
+  "ts": "2026-08-06T12:51:14Z",
+  "event": "filter.created",
+  "level": "info",
+  "session_id": "is3001.GLDBAE054631",
+  "trace_id": "abc123",
+  "schema_version": 1
+}
+```
+
+---
+
+### Event Attributes (`attrs`)
+
+The `attrs` object contains application-specific information.
+
+The logging system treats this as an opaque JSON object.
+
+Example:
+
+```json
+{
+  "attrs": {
+    "filter_id": "f1001",
+    "filter_type": "dropdown",
+    "source_cube": "sales_cube",
+    "source_field": "country",
+    "operator": "=",
+    "value": "USA"
+  }
+}
+```
+
+Advantages:
+
+* No database schema changes when new attributes are introduced.
+* Different application modules can log different information.
+* The logging service remains generic.
+
+---
+
+# 3. Log Event Naming Convention
+
+Events will use dot-separated names.
+
+Format:
+
+```
+<module>.<action>.<state>
+```
+
+Examples:
+
+```
+filter.created
+
+filter.updated
+
+filter.removed
+
+filter.cleared
+
+query.generated
+
+query.execution.started
+
+query.execution.completed
+
+query.execution.failed
+```
+
+Benefits:
+
+Allows flexible querying:
+
+Find all filter events:
+
+```sql
+WHERE event LIKE 'filter.%'
+```
+
+Find failures:
+
+```sql
+WHERE event LIKE '%.failed'
+```
+
+Find query activity:
+
+```sql
+WHERE event LIKE 'query.%'
+```
+
+---
+
+# 4. Log Entry Structure
+
+The standard log format:
+
+```json
+{
+  "ts": "2026-08-06T12:51:14Z",
+
+  "event": "filter.created",
+
+  "level": "info",
+
+  "message": "User created filter",
+
+  "session_id": "session123",
+
+  "trace_id": "trace456",
+
+  "schema_version": 1,
+
+  "attrs": {
+
+  }
+}
+```
+
+---
+
+# Phase 1: Browser Console Logging (Detailed)
+
+## Objective
+
+Implement a client-side logging framework inside the React application.
+
+The purpose of Phase 1 is:
+
+* Identify important application events.
+* Validate event naming.
+* Understand logging frequency.
+* Confirm useful attributes.
+* Avoid premature database design.
+
+At this stage:
+
+```
+React Application
+
+      |
+
+      |
+
+LoggerService
+
+      |
+
+      |
+
+Browser Console
+```
+
+No backend changes are required.
+
+---
+
+# Phase 1 Implementation Tasks
+
+## 1. Create LoggerService
+
+Create:
+
+```
+src/services/LoggerService.ts
+```
+
+Responsibilities:
+
+* Generate timestamps.
+* Maintain session ID.
+* Generate trace IDs.
+* Create standard log structure.
+* Output logs to browser console.
+
+Example:
+
+```typescript
+logger.info(
+    "filter.created",
+    "User created filter",
+    traceId,
+    {
+       field:"country",
+       value:"USA"
+    }
+);
+```
+
+---
+
+# 2. Initialize Application Session
+
+When the application starts:
+
+```typescript
+logger.startSession();
+```
+
+The logger creates:
+
+```
+session_id
+```
+
+Example:
+
+```
+web.20260806T125114.v1.x8J9
+```
+
+All logs during the user session contain this ID.
+
+Purpose:
+
+* Group all activities from one user session.
+* Support troubleshooting.
+
+---
+
+# 3. Implement Trace ID Support
+
+A trace ID groups related operations.
+
+Example workflow:
+
+```
+User clicks Run Query
+
+        |
+        |
+query.generated
+
+        |
+        |
+query.execution.started
+
+        |
+        |
+query.execution.completed
+```
+
+All events share:
+
+```
+trace_id = abc123
+```
+
+This allows tracking a complete workflow.
+
+---
+
+# 4. Identify Filtering Components
+
+The first logging scope is the filtering system.
+
+Components to review:
+
+| Component        | Responsibility        | Logging               |
+| ---------------- | --------------------- | --------------------- |
+| QueryBuilder     | Main query state      | Query changes         |
+| FilterPanel      | Filter collection     | Add/remove/clear      |
+| FilterRow        | Individual filter     | Edit values/operators |
+| Cube API Service | Backend communication | Execution lifecycle   |
+
+---
+
+# 5. Filtering Events to Capture
+
+## User Actions
+
+### Create Filter
+
+Event:
+
+```
+filter.created
+```
+
+Example:
+
+```json
+{
+ "attrs":{
+   "field":"country",
+   "operator":"=",
+   "value":"USA"
+ }
+}
+```
+
+---
+
+### Update Filter
+
+Event:
+
+```
+filter.updated
+```
+
+Attributes:
+
+```json
+{
+ "old_value":"USA",
+ "new_value":"Canada"
+}
+```
+
+---
+
+### Remove Filter
+
+Event:
+
+```
+filter.removed
+```
+
+Attributes:
+
+```json
+{
+ "filter_id":"123"
+}
+```
+
+---
+
+### Clear Filters
+
+Event:
+
+```
+filter.cleared
+```
+
+Attributes:
+
+```json
+{
+ "previous_filter_count":5
+}
+```
+
+---
+
+# 6. Query Generation Logging
+
+When the application creates the Cube query:
+
+Event:
+
+```
+query.generated
+```
+
+Example:
+
+```json
+{
+ "attrs":{
+    "query":{
+       "filters":[]
+    }
+ }
+}
+```
+
+Purpose:
+
+* Debug incorrect queries.
+* Understand user workflow.
+
+---
+
+# 7. Query Execution Logging
+
+## Execution Started
+
+Event:
+
+```
+query.execution.started
+```
+
+Attributes:
+
+```json
+{
+ "request_id":"REQ001"
+}
+```
+
+---
+
+## Execution Completed
+
+Event:
+
+```
+query.execution.completed
+```
+
+Attributes:
+
+```json
+{
+ "duration_ms":520,
+ "status":"success"
+}
+```
+
+---
+
+## Execution Failed
+
+Event:
+
+```
+query.execution.failed
+```
+
+Attributes:
+
+```json
+{
+ "error":"Timeout"
+}
+```
+
+---
+
+# Phase 1 Deliverables
+
+At the end of Phase 1:
+
+## Code
+
+Implemented:
+
+```
+LoggerService.ts
+
+events.ts
+
+loggingHelpers.ts
+```
+
+---
+
+## Documentation
+
+Completed:
+
+* Event naming convention
+* Component logging map
+* List of filter events
+* Sample JSON logs
+
+---
+
+## Validation
+
+Verify:
+
+* Filter creation logs correctly.
+* Filter editing logs correctly.
+* Filter removal logs correctly.
+* Query generation logs correctly.
+* Query failures are captured.
+
+---
+
+# Phase 2: Central Logging API (High Level)
+
+## Objective
+
+Move logs from the browser into a centralized backend service.
+
+Architecture:
+
+```
+React
+
+ |
+
+LoggerService
+
+ |
+
+POST /api/logs
+
+ |
+
+Backend Logging Service
+```
+
+Changes:
+
+* LoggerService sends HTTP requests.
+* Backend validates log format.
+* Backend attaches server metadata.
+
+The React components do not change.
+
+Example:
+
+Before:
+
+```typescript
+console.log(logEntry)
+```
+
+After:
+
+```typescript
+axios.post(
+ "/api/logs",
+ logEntry
+)
+```
+
+---
+
+# Phase 2 Goals
+
+* Centralize logs.
+* Support multiple users.
+* Preserve session and trace relationships.
+* Enable backend monitoring.
+
+---
+
+# Phase 3: Database Persistence and Analytics (High Level)
+
+## Objective
+
+Persist logs for long-term usage.
+
+Database design:
+
+Fixed columns:
+
+```
+log_id
+
+timestamp
+
+event
+
+level
+
+session_id
+
+trace_id
+
+schema_version
+
+message
+
+attrs(JSON)
+```
+
+---
+
+Example:
+
+| Column     | Purpose             |
+| ---------- | ------------------- |
+| timestamp  | When event happened |
+| event      | Event name          |
+| level      | Severity            |
+| session_id | User session        |
+| trace_id   | Workflow tracking   |
+| attrs      | Flexible JSON data  |
+
+---
+
+# Phase 3 Capabilities
+
+After database storage:
+
+## Troubleshooting
+
+Example:
+
+Find failed queries:
+
+```sql
+WHERE event LIKE 'query%.failed'
+```
+
+---
+
+## User Activity Analysis
+
+Example:
+
+```
+Which filters are used most?
+```
+
+---
+
+## Performance Monitoring
+
+Example:
+
+```
+Average query execution time
+```
+
+---
+
+## Audit History
+
+Example:
+
+```
+Who changed a dashboard filter?
+```
+
+---
+
+# Final Architecture
+
+```
+                 React Application
+
+                       |
+
+                LoggerService
+
+                       |
+
+          ----------------------------
+
+          |                          |
+
+     Phase 1                    Phase 2
+
+     Console                    API
+
+                                     |
+
+                                  Phase 3
+
+                                Database
+
+
+```
+
+---
+
+# Summary
+
+The proposed logging implementation starts with a lightweight browser-based logging framework and evolves into a complete observability solution.
+
+Phase 1 establishes the event model, naming convention, and logging patterns. Phase 2 introduces centralized collection through backend APIs. Phase 3 enables persistent storage, monitoring, auditing, and analytics.
+
+The design keeps the core schema stable while allowing application-specific data to evolve through the flexible `attrs` JSON structure. This prevents frequent database changes and provides a scalable foundation for logging across the SDA platform.
+
+
+
+============END DOC==========
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 I think this is **more scalable and industry-standard design** than the original schema. This is very similar to how **OpenTelemetry**, **Datadog**, **Elastic**, and **Splunk** structure logs.
 
 The biggest change is this:
