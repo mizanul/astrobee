@@ -861,3 +861,392 @@ Country = USA
 
 This schema is scalable: for **Phase 1**, you can log it directly to the browser console as JSON; for **Phase 2**, send the same payload to a backend API; and for **Phase 3**, persist the JSON (or map its fields to relational columns) in your logging database without changing the frontend logging interface.
 
+
+
+
+
+===================
+
+Below is a production-style `LoggerService.tsx` that implements the schema you described. For **Phase 1**, it logs the JSON to the browser console. Later, you can replace the `console.log()` with an API call without changing the components that use it.
+
+```tsx
+// src/services/LoggerService.ts
+
+export type Severity = "DEBUG" | "INFO" | "WARNING" | "ERROR";
+
+export interface ApplicationInfo {
+  name: string;
+  version: string;
+  environment: string;
+}
+
+export interface SessionInfo {
+  sessionId: string;
+  userId?: string;
+  userName?: string;
+  role?: string;
+}
+
+export interface PageInfo {
+  url: string;
+  component: string;
+  module: string;
+}
+
+export interface EventInfo {
+  category: string;
+  action: string;
+  description?: string;
+  severity: Severity;
+}
+
+export interface FilterInfo {
+  filterId?: string;
+  field?: string;
+  operator?: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  filterCount?: number;
+}
+
+export interface QueryInfo {
+  generatedQuery?: unknown;
+}
+
+export interface ExecutionInfo {
+  requestId?: string;
+  startTime?: string;
+  endTime?: string;
+  durationMs?: number;
+  status?: "SUCCESS" | "FAILED" | "RUNNING";
+}
+
+export interface BrowserInfo {
+  name?: string;
+  version?: string;
+  platform?: string;
+}
+
+export interface ErrorInfo {
+  code?: string;
+  message?: string;
+  stackTrace?: string;
+}
+
+export interface MetadataInfo {
+  ipAddress?: string;
+  feature?: string;
+  notes?: string;
+}
+
+export interface LogEntry {
+  id: string;
+  timestamp: string;
+
+  application: ApplicationInfo;
+
+  session: SessionInfo;
+
+  page: PageInfo;
+
+  event: EventInfo;
+
+  filter?: FilterInfo;
+
+  query?: QueryInfo;
+
+  execution?: ExecutionInfo;
+
+  browser?: BrowserInfo;
+
+  error?: ErrorInfo;
+
+  metadata?: MetadataInfo;
+}
+
+class LoggerService {
+  private readonly application: ApplicationInfo = {
+    name: "SDA",
+    version: "1.0.0",
+    environment: process.env.NODE_ENV ?? "development",
+  };
+
+  private generateId(): string {
+    return crypto.randomUUID();
+  }
+
+  private getBrowser(): BrowserInfo {
+    return {
+      name: navigator.appName,
+      version: navigator.appVersion,
+      platform: navigator.platform,
+    };
+  }
+
+  public log(
+    event: EventInfo,
+    options?: {
+      session?: Partial<SessionInfo>;
+      page?: Partial<PageInfo>;
+      filter?: FilterInfo;
+      query?: QueryInfo;
+      execution?: ExecutionInfo;
+      error?: ErrorInfo;
+      metadata?: MetadataInfo;
+    }
+  ): void {
+    const entry: LogEntry = {
+      id: this.generateId(),
+      timestamp: new Date().toISOString(),
+
+      application: this.application,
+
+      session: {
+        sessionId: options?.session?.sessionId ?? "unknown",
+        userId: options?.session?.userId,
+        userName: options?.session?.userName,
+        role: options?.session?.role,
+      },
+
+      page: {
+        url: options?.page?.url ?? window.location.pathname,
+        component: options?.page?.component ?? "",
+        module: options?.page?.module ?? "",
+      },
+
+      event,
+
+      filter: options?.filter,
+
+      query: options?.query,
+
+      execution: options?.execution,
+
+      browser: this.getBrowser(),
+
+      error: options?.error,
+
+      metadata: options?.metadata,
+    };
+
+    console.groupCollapsed(
+      `[${entry.event.severity}] ${entry.event.action}`
+    );
+    console.log(entry);
+    console.groupEnd();
+
+    // Phase 2
+    // axios.post("/api/logs", entry);
+  }
+
+  //---------------------------------------------
+  // Convenience methods
+  //---------------------------------------------
+
+  public filterCreated(
+    field: string,
+    operator: string,
+    value: unknown
+  ) {
+    this.log(
+      {
+        category: "FILTER",
+        action: "FILTER_CREATED",
+        description: "User created filter",
+        severity: "INFO",
+      },
+      {
+        filter: {
+          field,
+          operator,
+          newValue: value,
+        },
+      }
+    );
+  }
+
+  public filterUpdated(
+    field: string,
+    operator: string,
+    oldValue: unknown,
+    newValue: unknown
+  ) {
+    this.log(
+      {
+        category: "FILTER",
+        action: "FILTER_UPDATED",
+        description: "User updated filter",
+        severity: "INFO",
+      },
+      {
+        filter: {
+          field,
+          operator,
+          oldValue,
+          newValue,
+        },
+      }
+    );
+  }
+
+  public filterRemoved(field: string) {
+    this.log(
+      {
+        category: "FILTER",
+        action: "FILTER_REMOVED",
+        description: "User removed filter",
+        severity: "INFO",
+      },
+      {
+        filter: {
+          field,
+        },
+      }
+    );
+  }
+
+  public filtersCleared(filterCount: number) {
+    this.log(
+      {
+        category: "FILTER",
+        action: "FILTERS_CLEARED",
+        description: "User cleared all filters",
+        severity: "INFO",
+      },
+      {
+        filter: {
+          filterCount,
+        },
+      }
+    );
+  }
+
+  public queryGenerated(query: unknown) {
+    this.log(
+      {
+        category: "QUERY",
+        action: "QUERY_GENERATED",
+        description: "Cube query generated",
+        severity: "INFO",
+      },
+      {
+        query: {
+          generatedQuery: query,
+        },
+      }
+    );
+  }
+
+  public queryExecutionStarted(requestId: string) {
+    this.log(
+      {
+        category: "API",
+        action: "QUERY_EXECUTION_STARTED",
+        description: "Query execution started",
+        severity: "INFO",
+      },
+      {
+        execution: {
+          requestId,
+          startTime: new Date().toISOString(),
+          status: "RUNNING",
+        },
+      }
+    );
+  }
+
+  public queryExecutionCompleted(
+    requestId: string,
+    durationMs: number
+  ) {
+    this.log(
+      {
+        category: "API",
+        action: "QUERY_EXECUTION_COMPLETED",
+        description: "Query execution completed",
+        severity: "INFO",
+      },
+      {
+        execution: {
+          requestId,
+          endTime: new Date().toISOString(),
+          durationMs,
+          status: "SUCCESS",
+        },
+      }
+    );
+  }
+
+  public queryExecutionFailed(
+    requestId: string,
+    error: Error
+  ) {
+    this.log(
+      {
+        category: "API",
+        action: "QUERY_EXECUTION_FAILED",
+        description: "Query execution failed",
+        severity: "ERROR",
+      },
+      {
+        execution: {
+          requestId,
+          endTime: new Date().toISOString(),
+          status: "FAILED",
+        },
+        error: {
+          message: error.message,
+          stackTrace: error.stack,
+        },
+      }
+    );
+  }
+}
+
+const logger = new LoggerService();
+
+export default logger;
+```
+
+## Example Usage
+
+```tsx
+import LoggerService from "../services/LoggerService";
+
+// User adds a filter
+LoggerService.filterCreated(
+    "Country",
+    "=",
+    "USA"
+);
+
+// User edits a filter
+LoggerService.filterUpdated(
+    "Country",
+    "=",
+    "USA",
+    "Canada"
+);
+
+// User removes a filter
+LoggerService.filterRemoved("Country");
+
+// User clears all filters
+LoggerService.filtersCleared(5);
+
+// Cube query generated
+LoggerService.queryGenerated(cubeQuery);
+
+// API execution
+LoggerService.queryExecutionStarted("REQ-1001");
+
+// Success
+LoggerService.queryExecutionCompleted("REQ-1001", 425);
+
+// Failure
+LoggerService.queryExecutionFailed("REQ-1001", error);
+```
+
+This design follows the **Facade pattern**: React components only call methods like `filterCreated()` or `queryGenerated()`, while the service encapsulates the JSON schema. In **Phase 2**, you can replace the commented `axios.post("/api/logs", entry)` with a backend call, and in **Phase 3**, the backend can persist the same JSON structure to a database without requiring changes to the React components.
+
+
