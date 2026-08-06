@@ -1,3 +1,373 @@
+
+
+
+
+
+
+I think your lead is proposing a **more scalable and industry-standard design** than the original schema. This is very similar to how **OpenTelemetry**, **Datadog**, **Elastic**, and **Splunk** structure logs.
+
+The biggest change is this:
+
+> **Instead of creating a rigid schema with `filter`, `query`, `execution`, etc., keep only a few standardized top-level fields and put everything else into `attrs`.**
+
+This has several advantages:
+
+* New features don't require database schema changes.
+* Different modules can log different data.
+* The logging service stays generic.
+* Queries remain efficient because important fields (`event`, `level`, `timestamp`, etc.) are indexed.
+
+---
+
+# I would simplify your schema to something like this
+
+```typescript
+export interface LogEntry {
+    ts: string;
+    event: string;
+    level: "debug" | "info" | "warn" | "error";
+
+    session_id: string;
+    trace_id?: string;
+
+    schema_version: number;
+
+    message?: string;
+
+    attrs?: Record<string, unknown>;
+}
+```
+
+Notice there is **no FilterInfo**, **no QueryInfo**, **no ExecutionInfo**.
+
+Everything goes into attrs.
+
+Example
+
+```json
+{
+    "ts": "...",
+    "event": "filter.created",
+    "level": "info",
+
+    "session_id": "...",
+
+    "trace_id": "...",
+
+    "schema_version": 1,
+
+    "message": "User created filter",
+
+    "attrs": {
+        "filter_id": "123",
+        "field": "Country",
+        "operator": "=",
+        "value": "USA"
+    }
+}
+```
+
+---
+
+# I also agree with dot-separated event names
+
+Instead of
+
+```
+FILTER_CREATED
+```
+
+use
+
+```
+filter.created
+```
+
+Instead of
+
+```
+QUERY_EXECUTION_STARTED
+```
+
+use
+
+```
+query.execution.started
+```
+
+Instead of
+
+```
+QUERY_EXECUTION_FAILED
+```
+
+use
+
+```
+query.execution.failed
+```
+
+Then later your database can do
+
+```sql
+WHERE event LIKE '%.failed'
+```
+
+or
+
+```sql
+WHERE event LIKE 'filter.%'
+```
+
+which is very powerful.
+
+---
+
+# I would even create constants
+
+```typescript
+export const ev = {
+
+    filter: {
+
+        created: "filter.created",
+
+        updated: "filter.updated",
+
+        removed: "filter.removed",
+
+        cleared: "filter.cleared",
+
+        prefetch: {
+
+            started: "filter.prefetch.started",
+
+            completed: "filter.prefetch.completed",
+
+            failed: "filter.prefetch.failed"
+
+        }
+
+    },
+
+    query: {
+
+        generated: "query.generated",
+
+        execution: {
+
+            started: "query.execution.started",
+
+            completed: "query.execution.completed",
+
+            failed: "query.execution.failed"
+
+        }
+
+    }
+
+};
+```
+
+Now nobody mistypes event names.
+
+---
+
+# I like his Trace ID idea too
+
+Imagine
+
+```
+User clicks Refresh
+```
+
+This causes
+
+```
+Generate query
+
+↓
+
+Call Cube
+
+↓
+
+Receive data
+
+↓
+
+Render Chart
+```
+
+All those logs should have the **same trace_id**
+
+```
+trace_id = a4b782
+```
+
+Then later
+
+```
+SELECT *
+
+WHERE trace_id='a4b782'
+```
+
+shows the whole request.
+
+---
+
+# Session ID
+
+I also agree.
+
+On startup
+
+```typescript
+Logger.startSession();
+```
+
+might generate
+
+```
+session_id =
+is3001.GLDBAE054631.20260806T125114.v0.1.1.x6J8
+```
+
+Every log automatically contains it.
+
+The React code never passes it.
+
+---
+
+# attrs helper
+
+I especially like this idea.
+
+Instead of
+
+```typescript
+attrs: {
+
+    filter.field,
+
+    filter.operator,
+
+    filter.value,
+
+    filter.id
+
+}
+```
+
+everywhere
+
+you do
+
+```typescript
+attrs: {
+
+    ...getFilterInfo(filter),
+
+    cube: cubeName
+
+}
+```
+
+Now if the Filter object changes later,
+
+only
+
+```
+getFilterInfo()
+```
+
+changes.
+
+---
+
+# Overall architecture I'd recommend
+
+```text
+React Component
+       │
+       ▼
+Logger.info(
+    ev.filter.created,
+    "User created filter",
+    traceId,
+    {
+        ...getFilterInfo(filter),
+        cube: cubeName
+    }
+)
+       │
+       ▼
+LoggerService
+       │
+       ├── Phase 1
+       │      console.log(logEntry)
+       │
+       ├── Phase 2
+       │      POST /logs
+       │
+       └── Phase 3
+              Database
+```
+
+## My only suggestion to your lead
+
+The only thing I'd consider adding is a **`component`** field at the top level. It makes it much easier to identify where logs originate without inspecting `attrs`.
+
+```json
+{
+  "ts": "...",
+  "event": "filter.prefetch.started",
+  "level": "info",
+  "component": "QueryBuilder",
+  "session_id": "...",
+  "trace_id": "...",
+  "schema_version": 1,
+  "message": "Filter prefetch started",
+  "attrs": {
+    "filter_id": "...",
+    "source_cube": "...",
+    "field": "Country"
+  }
+}
+```
+
+This keeps the schema lightweight while making log filtering and debugging easier. Overall, your lead's proposal is well aligned with modern observability practices and is a strong foundation for a logging system that can grow with the application.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 For a **1-day exploration task**, I would **not start by thinking about the database**. Instead, design the logging in a way that the logging destination can be changed later.
 
 The phases should be:
