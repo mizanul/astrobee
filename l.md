@@ -3083,3 +3083,280 @@ LoggerService.queryExecutionFailed("REQ-1001", error);
 This design follows the **Facade pattern**: React components only call methods like `filterCreated()` or `queryGenerated()`, while the service encapsulates the JSON schema. In **Phase 2**, you can replace the commented `axios.post("/api/logs", entry)` with a backend call, and in **Phase 3**, the backend can persist the same JSON structure to a database without requiring changes to the React components.
 
 
+
+
+===============================================
+
+// loggingHelpers.ts
+
+/**
+ * Common component information for UI interaction logs.
+ */
+export interface ComponentInfo {
+  component: string;
+  interaction?: string;
+}
+
+/**
+ * Information extracted from a filter.
+ *
+ * This object is intentionally used as logging attributes (`attrs`)
+ * rather than as a strict database schema.
+ */
+export interface FilterInfo {
+  filter_id?: string;
+  filter_type?: string;
+
+  source_cube?: string;
+  source_field?: string;
+  source_field_type?: string;
+
+  operator?: string;
+
+  value?: unknown;
+}
+
+
+/**
+ * Creates a reusable component-level logging object.
+ *
+ * Example:
+ *
+ * getComponentInfo(
+ *   "FilterRow",
+ *   "filter.updated"
+ * )
+ */
+export function getComponentInfo(
+  component: string,
+  interaction?: string
+): ComponentInfo {
+  return {
+    component,
+    ...(interaction && {
+      interaction,
+    }),
+  };
+}
+
+
+/**
+ * Extracts logging information from a filter.
+ *
+ * The logger does not need to know the structure of the
+ * application's Filter object. This helper translates it
+ * into logging attributes.
+ */
+export function getFilterInfo(
+  filter: any
+): FilterInfo {
+  if (!filter) {
+    return {};
+  }
+
+  return {
+    filter_id: filter.id,
+    filter_type: filter.type,
+
+    source_cube:
+      filter.cube ??
+      filter.sourceCube,
+
+    source_field:
+      filter.field ??
+      filter.sourceField,
+
+    source_field_type:
+      filter.fieldType ??
+      filter.sourceFieldType,
+
+    operator: filter.operator,
+
+    value: filter.value,
+  };
+}
+
+
+/**
+ * Creates attributes for a filter interaction.
+ *
+ * This combines component information with filter information.
+ *
+ * Example:
+ *
+ * const attrs = getFilterInteractionInfo(
+ *   "FilterRow",
+ *   "field.changed",
+ *   filter
+ * );
+ */
+export function getFilterInteractionInfo(
+  component: string,
+  interaction: string,
+  filter: any
+): Record<string, unknown> {
+  return {
+    ...getComponentInfo(
+      component,
+      interaction
+    ),
+
+    ...getFilterInfo(filter),
+  };
+}
+
+
+/**
+ * Creates attributes for a filter value change.
+ *
+ * Useful when we want to capture both the previous
+ * and new value.
+ */
+export function getFilterValueChangeInfo(
+  component: string,
+  filter: any,
+  oldValue: unknown,
+  newValue: unknown
+): Record<string, unknown> {
+  return {
+    ...getComponentInfo(
+      component,
+      "value.changed"
+    ),
+
+    ...getFilterInfo(filter),
+
+    old_value: oldValue,
+    new_value: newValue,
+  };
+}
+
+
+/**
+ * Creates attributes for a filter field change.
+ */
+export function getFilterFieldChangeInfo(
+  component: string,
+  filter: any,
+  oldField: unknown,
+  newField: unknown
+): Record<string, unknown> {
+  return {
+    ...getComponentInfo(
+      component,
+      "field.changed"
+    ),
+
+    ...getFilterInfo(filter),
+
+    old_field: oldField,
+    new_field: newField,
+  };
+}
+
+
+/**
+ * Creates attributes for a filter operator change.
+ */
+export function getFilterOperatorChangeInfo(
+  component: string,
+  filter: any,
+  oldOperator: unknown,
+  newOperator: unknown
+): Record<string, unknown> {
+  return {
+    ...getComponentInfo(
+      component,
+      "operator.changed"
+    ),
+
+    ...getFilterInfo(filter),
+
+    old_operator: oldOperator,
+    new_operator: newOperator,
+  };
+}
+
+
+/**
+ * Creates attributes for clearing filters.
+ */
+export function getFilterClearInfo(
+  component: string,
+  filterCount: number
+): Record<string, unknown> {
+  return {
+    ...getComponentInfo(
+      component,
+      "filters.cleared"
+    ),
+
+    previous_filter_count: filterCount,
+  };
+}
+
+
+/**
+ * Creates attributes for filter prefetch operations.
+ */
+export function getFilterPrefetchInfo(
+  component: string,
+  filter: any,
+  extraAttributes?: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    ...getComponentInfo(
+      component,
+      "prefetch"
+    ),
+
+    ...getFilterInfo(filter),
+
+    ...extraAttributes,
+  };
+}
+
+
+
+=============================
+
+
+
+export const ev = {
+  filter: {
+    created: "filter.created",
+    updated: "filter.updated",
+    removed: "filter.removed",
+    cleared: "filter.cleared",
+
+    field: {
+      changed: "filter.field.changed",
+    },
+
+    operator: {
+      changed: "filter.operator.changed",
+    },
+
+    value: {
+      changed: "filter.value.changed",
+    },
+
+    prefetch: {
+      started: "filter.prefetch.started",
+      completed: "filter.prefetch.completed",
+      failed: "filter.prefetch.failed",
+    },
+  },
+
+  query: {
+    generated: "query.generated",
+
+    execution: {
+      started: "query.execution.started",
+      completed: "query.execution.completed",
+      failed: "query.execution.failed",
+    },
+  },
+} as const;
+
+
