@@ -3324,6 +3324,10 @@ export function getFilterPrefetchInfo(
 
 export const ev = {
   filter: {
+    // -----------------------------
+    // User interactions
+    // -----------------------------
+
     created: "filter.created",
     updated: "filter.updated",
     removed: "filter.removed",
@@ -3341,12 +3345,50 @@ export const ev = {
       changed: "filter.value.changed",
     },
 
+    // -----------------------------
+    // Option fetching
+    // -----------------------------
+
+    options: {
+      fetch: {
+        started: "filter.options.fetch.started",
+        completed: "filter.options.fetch.completed",
+        failed: "filter.options.fetch.failed",
+      },
+
+      page: {
+        requested: "filter.options.page.requested",
+        completed: "filter.options.page.completed",
+        failed: "filter.options.page.failed",
+      },
+    },
+
+    // -----------------------------
+    // Data resolution
+    // -----------------------------
+
+    data: {
+      resolve: {
+        started: "filter.data.resolve.started",
+        completed: "filter.data.resolve.completed",
+        failed: "filter.data.resolve.failed",
+      },
+    },
+
+    // -----------------------------
+    // Prefetch
+    // -----------------------------
+
     prefetch: {
       started: "filter.prefetch.started",
       completed: "filter.prefetch.completed",
       failed: "filter.prefetch.failed",
     },
   },
+
+  // -----------------------------
+  // Query
+  // -----------------------------
 
   query: {
     generated: "query.generated",
@@ -3358,5 +3400,4 @@ export const ev = {
     },
   },
 } as const;
-
 
