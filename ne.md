@@ -235,13 +235,6 @@ export type LogEvent =
 
 # 2. `loggingHelpers.ts`
 
-I would make this helper file responsible for building `attrs`.
-
-The important thing is that **`attrs` remains flexible**.
-
-We don't want to force every component to provide the same information.
-
-```typescript
 // loggingHelpers.ts
 
 // ============================================================
@@ -249,201 +242,57 @@ We don't want to force every component to provide the same information.
 // ============================================================
 
 /**
- * Generic attributes that can be attached to a log entry.
+ * Arbitrary attributes associated with a log event.
  *
- * The logging system intentionally does not impose a strict
- * schema on attrs.
+ * This intentionally has no fixed schema.
  */
 export type LogAttributes = Record<string, unknown>;
 
 
 /**
- * Basic component information.
+ * Common information about the component performing
+ * an operation or interaction.
  */
 export interface ComponentInfo {
   component: string;
-
-  interaction?: string;
-
   operation?: string;
 }
 
 
-/**
- * Information extracted from a filter.
- *
- * These fields are optional because different filter types
- * may contain different information.
- */
-export interface FilterInfo {
-  filter_id?: string;
-
-  filter_type?: string;
-
-  source_cube?: string;
-
-  source_field?: string;
-
-  source_field_type?: string;
-
-  operator?: string;
-
-  value?: unknown;
-}
-
-
 // ============================================================
-// COMPONENT HELPERS
+// GENERIC LOG ATTRIBUTES
 // ============================================================
 
 /**
- * Creates component-level information.
+ * Creates attributes for any application activity.
  *
- * Example:
+ * This is the primary helper that application code should use.
  *
- * getComponentInfo(
- *   "FilterRow",
- *   "value.changed"
- * )
+ * Examples:
+ *
+ * getLogInfo("FilterOptions", "options.fetch", {
+ *   page: 1
+ * });
+ *
+ * getLogInfo("FilterSerializer", "serialization", {
+ *   filter_count: 3
+ * });
+ *
+ * getLogInfo("CubeAPI", "request", {
+ *   endpoint: "/cube/load"
+ * });
  */
-export function getComponentInfo(
+export function getLogInfo(
   component: string,
-  interaction?: string,
-  operation?: string
-): ComponentInfo {
+  operation?: string,
+  attrs?: LogAttributes
+): LogAttributes {
   return {
     component,
-
-    ...(interaction !== undefined && {
-      interaction,
-    }),
 
     ...(operation !== undefined && {
       operation,
     }),
-  };
-}
-
-
-// ============================================================
-// FILTER INFORMATION
-// ============================================================
-
-/**
- * Extracts useful information from an application filter object.
- *
- * This function intentionally returns only logging information.
- * It does not modify the filter.
- */
-export function getFilterInfo(
-  filter: any
-): FilterInfo {
-  if (!filter) {
-    return {};
-  }
-
-  return {
-    filter_id:
-      filter.id ??
-      filter.filterId,
-
-    filter_type:
-      filter.type ??
-      filter.filterType,
-
-    source_cube:
-      filter.cube ??
-      filter.sourceCube,
-
-    source_field:
-      filter.field ??
-      filter.sourceField,
-
-    source_field_type:
-      filter.fieldType ??
-      filter.sourceFieldType,
-
-    operator:
-      filter.operator,
-
-    value:
-      filter.value,
-  };
-}
-
-
-// ============================================================
-// GENERIC FILTER OPERATION
-// ============================================================
-
-/**
- * Creates a generic attribute object for a filtering operation.
- *
- * This should be the primary helper used by most filtering
- * system logging.
- *
- * Example:
- *
- * getFilterOperationInfo(
- *   "FilterOptions",
- *   "options.fetch",
- *   filter,
- *   {
- *     page: 1
- *   }
- * )
- */
-export function getFilterOperationInfo(
-  component: string,
-
-  operation: string,
-
-  filter?: any,
-
-  attrs?: LogAttributes
-): LogAttributes {
-  return {
-    ...getComponentInfo(
-      component,
-      undefined,
-      operation
-    ),
-
-    ...(filter
-      ? getFilterInfo(filter)
-      : {}),
-
-    ...(attrs ?? {}),
-  };
-}
-
-
-// ============================================================
-// USER INTERACTION
-// ============================================================
-
-/**
- * Creates attributes for a user/component interaction
- * with a filter.
- */
-export function getFilterInteractionInfo(
-  component: string,
-
-  interaction: string,
-
-  filter?: any,
-
-  attrs?: LogAttributes
-): LogAttributes {
-  return {
-    ...getComponentInfo(
-      component,
-      interaction
-    ),
-
-    ...(filter
-      ? getFilterInfo(filter)
-      : {}),
 
     ...(attrs ?? {}),
   };
@@ -455,155 +304,22 @@ export function getFilterInteractionInfo(
 // ============================================================
 
 /**
- * Creates attributes for a filter value change.
+ * Creates attributes for a value change.
+ *
+ * Useful for any part of the application.
  */
-export function getFilterValueChangeInfo(
+export function getValueChangeInfo(
   component: string,
-
-  filter: any,
-
   oldValue: unknown,
-
   newValue: unknown,
-
   attrs?: LogAttributes
 ): LogAttributes {
-  return {
-    ...getComponentInfo(
-      component,
-      "value.changed"
-    ),
-
-    ...getFilterInfo(filter),
-
-    old_value: oldValue,
-
-    new_value: newValue,
-
-    ...(attrs ?? {}),
-  };
-}
-
-
-// ============================================================
-// FIELD CHANGE
-// ============================================================
-
-/**
- * Creates attributes for a filter field change.
- */
-export function getFilterFieldChangeInfo(
-  component: string,
-
-  filter: any,
-
-  oldField: unknown,
-
-  newField: unknown,
-
-  attrs?: LogAttributes
-): LogAttributes {
-  return {
-    ...getComponentInfo(
-      component,
-      "field.changed"
-    ),
-
-    ...getFilterInfo(filter),
-
-    old_field: oldField,
-
-    new_field: newField,
-
-    ...(attrs ?? {}),
-  };
-}
-
-
-// ============================================================
-// OPERATOR CHANGE
-// ============================================================
-
-/**
- * Creates attributes for a filter operator change.
- */
-export function getFilterOperatorChangeInfo(
-  component: string,
-
-  filter: any,
-
-  oldOperator: unknown,
-
-  newOperator: unknown,
-
-  attrs?: LogAttributes
-): LogAttributes {
-  return {
-    ...getComponentInfo(
-      component,
-      "operator.changed"
-    ),
-
-    ...getFilterInfo(filter),
-
-    old_operator: oldOperator,
-
-    new_operator: newOperator,
-
-    ...(attrs ?? {}),
-  };
-}
-
-
-// ============================================================
-// OPTION FETCHING
-// ============================================================
-
-/**
- * Creates attributes for filter option fetching.
- */
-export function getFilterOptionFetchInfo(
-  component: string,
-
-  filter?: any,
-
-  attrs?: LogAttributes
-): LogAttributes {
-  return getFilterOperationInfo(
+  return getLogInfo(
     component,
-    "options.fetch",
-    filter,
-    attrs
-  );
-}
-
-
-// ============================================================
-// PAGINATION
-// ============================================================
-
-/**
- * Creates attributes for filter option pagination.
- */
-export function getFilterPaginationInfo(
-  component: string,
-
-  filter: any,
-
-  page: number,
-
-  pageSize: number,
-
-  attrs?: LogAttributes
-): LogAttributes {
-  return getFilterOperationInfo(
-    component,
-    "options.page",
-    filter,
+    "value.changed",
     {
-      page,
-
-      page_size: pageSize,
+      old_value: oldValue,
+      new_value: newValue,
 
       ...(attrs ?? {}),
     }
@@ -612,87 +328,109 @@ export function getFilterPaginationInfo(
 
 
 // ============================================================
-// DATA RESOLUTION
+// FIELD CHANGE
 // ============================================================
 
 /**
- * Creates attributes for filter data resolution.
+ * Creates attributes for a field change.
  */
-export function getFilterDataResolutionInfo(
+export function getFieldChangeInfo(
   component: string,
-
-  filter?: any,
-
+  oldField: unknown,
+  newField: unknown,
   attrs?: LogAttributes
 ): LogAttributes {
-  return getFilterOperationInfo(
+  return getLogInfo(
     component,
-    "data.resolve",
-    filter,
-    attrs
+    "field.changed",
+    {
+      old_field: oldField,
+      new_field: newField,
+
+      ...(attrs ?? {}),
+    }
   );
 }
 
 
 // ============================================================
-// PREFETCH
+// OPERATOR CHANGE
 // ============================================================
 
 /**
- * Creates attributes for filter prefetching.
+ * Creates attributes for an operator change.
  */
-export function getFilterPrefetchInfo(
+export function getOperatorChangeInfo(
   component: string,
-
-  filter?: any,
-
+  oldOperator: unknown,
+  newOperator: unknown,
   attrs?: LogAttributes
 ): LogAttributes {
-  return getFilterOperationInfo(
+  return getLogInfo(
     component,
-    "prefetch",
-    filter,
-    attrs
+    "operator.changed",
+    {
+      old_operator: oldOperator,
+      new_operator: newOperator,
+
+      ...(attrs ?? {}),
+    }
   );
 }
 
 
 // ============================================================
-// SERIALIZATION
+// ERROR
 // ============================================================
 
 /**
- * Creates attributes for filter serialization.
- *
- * Avoid putting the complete serialized payload into attrs
- * unless it is specifically required for debugging.
+ * Converts an unknown error into logging attributes.
  */
-export function getFilterSerializationInfo(
-  component: string,
-
-  filter?: any,
-
-  attrs?: LogAttributes
+export function getErrorInfo(
+  error: unknown
 ): LogAttributes {
-  return getFilterOperationInfo(
-    component,
-    "serialization",
-    filter,
-    attrs
-  );
+  if (!error) {
+    return {};
+  }
+
+  if (error instanceof Error) {
+    return {
+      error_name: error.name,
+      error_message: error.message,
+      error_stack: error.stack,
+    };
+  }
+
+  if (typeof error === "string") {
+    return {
+      error_message: error,
+    };
+  }
+
+  return {
+    error,
+  };
 }
 
 
 // ============================================================
-// DESERIALIZATION
+// PERFORMANCE
 // ============================================================
 
 /**
- * Creates attributes for filter deserialization.
+ * Adds duration information to a log.
  */
-export function getFilterDeserializationInfo(
-  component: string,
+export function getPerformanceInfo(
+  startTime: number,
+  attrs?: LogAttributes
+): LogAttributes {
+  return {
+    duration_ms:
+      performance.now() - startTime,
 
+    ...(attrs ?? {}),
+  };
+}
   filter?: any,
 
   attrs?: LogAttributes
