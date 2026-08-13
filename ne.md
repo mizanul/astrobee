@@ -466,4 +466,572 @@ getLogInfo(
   }
 }
 ```
+==========================
 
+```
+// LoggerService.ts
+
+// ============================================================
+// TYPES
+// ============================================================
+
+export type LogLevel =
+  | "debug"
+  | "info"
+  | "warning"
+  | "error";
+
+
+export type LogAttributes = Record<string, unknown>;
+
+
+export interface LogEntry {
+  /**
+   * Event timestamp in ISO-8601 format.
+   */
+  ts: string;
+
+  /**
+   * Log severity.
+   */
+  level: LogLevel;
+
+  /**
+   * Dot-separated event name.
+   *
+   * Examples:
+   * filter.created
+   * filter.options.fetch.started
+   * filter.cube_api.request.failed
+   */
+  event: string;
+
+  /**
+   * Name of the service producing the log.
+   *
+   * Example:
+   * sda-query-builder
+   */
+  service: string;
+
+  /**
+   * Application/product name.
+   *
+   * Example:
+   * SDA
+   */
+  application: string;
+
+  /**
+   * Runtime environment.
+   *
+   * Example:
+   * development
+   * qa
+   * staging
+   * production
+   */
+  environment: string;
+
+  /**
+   * Host/runtime identifier.
+   *
+   * For a browser application this may be the browser/client
+   * identifier rather than a physical server hostname.
+   */
+  host: string;
+
+  /**
+   * Identifies the user's application session.
+   */
+  session_id: string;
+
+  /**
+   * Identifies a specific operation/workflow.
+   */
+  trace_id?: string;
+
+  /**
+   * Version of this log schema.
+   */
+  schema_version: number;
+
+  /**
+   * Human-readable description of the event.
+   */
+  message?: string;
+
+  /**
+   * Application-specific data.
+   *
+   * This is intentionally opaque to the logging schema.
+   */
+  attrs: LogAttributes;
+}
+
+
+// ============================================================
+// CONFIGURATION
+// ============================================================
+
+export interface LoggerConfig {
+  service: string;
+
+  application: string;
+
+  environment: string;
+
+  /**
+   * Optional host identifier.
+   *
+   * If not supplied, LoggerService will generate a browser
+   * client identifier.
+   */
+  host?: string;
+
+  /**
+   * Current logging schema version.
+   */
+  schemaVersion?: number;
+
+  /**
+   * Enable/disable console output.
+   */
+  consoleEnabled?: boolean;
+
+  /**
+   * Minimum level to output.
+   *
+   * Example:
+   *
+   * "debug"     -> everything
+   * "info"      -> info, warning, error
+   * "warning"   -> warning, error
+   * "error"     -> error only
+   */
+  minLevel?: LogLevel;
+}
+
+
+// ============================================================
+// LOGGER SERVICE
+// ============================================================
+
+class LoggerService {
+  private readonly service: string;
+
+  private readonly application: string;
+
+  private readonly environment: string;
+
+  private readonly host: string;
+
+  private readonly schemaVersion: number;
+
+  private readonly consoleEnabled: boolean;
+
+  private readonly minLevel: LogLevel;
+
+  /**
+   * Session ID remains constant for the lifetime of this
+   * LoggerService instance.
+   */
+  private sessionId: string;
+
+  /**
+   * Used to generate trace IDs.
+   */
+  private traceCounter = 0;
+
+
+  constructor(config: LoggerConfig) {
+    this.service = config.service;
+
+    this.application = config.application;
+
+    this.environment = config.environment;
+
+    this.host =
+      config.host ??
+      this.getClientHost();
+
+    this.schemaVersion =
+      config.schemaVersion ?? 1;
+
+    this.consoleEnabled =
+      config.consoleEnabled ?? true;
+
+    this.minLevel =
+      config.minLevel ?? "debug";
+
+    this.sessionId = this.generateSessionId();
+  }
+
+
+  // ==========================================================
+  // SESSION
+  // ==========================================================
+
+  /**
+   * Starts a new application logging session.
+   *
+   * Returns the generated session ID.
+   */
+  public startSession(): string {
+    this.sessionId =
+      this.generateSessionId();
+
+    return this.sessionId;
+  }
+
+
+  /**
+   * Returns the current session ID.
+   */
+  public getSessionId(): string {
+    return this.sessionId;
+  }
+
+
+  // ==========================================================
+  // TRACE
+  // ==========================================================
+
+  /**
+   * Generates a trace ID for an operation/workflow.
+   *
+   * Multiple log entries belonging to the same operation
+   * should use the same trace ID.
+   */
+  public newTraceId(): string {
+    this.traceCounter += 1;
+
+    return [
+      this.sessionId,
+      Date.now().toString(36),
+      this.traceCounter.toString(36),
+      this.randomId(),
+    ].join("-");
+  }
+
+
+  // ==========================================================
+  // DEBUG
+  // ==========================================================
+
+  public debug(
+    event: string,
+    message?: string,
+    traceId?: string,
+    attrs: LogAttributes = {}
+  ): void {
+    this.write(
+      "debug",
+      event,
+      message,
+      traceId,
+      attrs
+    );
+  }
+
+
+  // ==========================================================
+  // INFO
+  // ==========================================================
+
+  public info(
+    event: string,
+    message?: string,
+    traceId?: string,
+    attrs: LogAttributes = {}
+  ): void {
+    this.write(
+      "info",
+      event,
+      message,
+      traceId,
+      attrs
+    );
+  }
+
+
+  // ==========================================================
+  // WARNING
+  // ==========================================================
+
+  public warning(
+    event: string,
+    message?: string,
+    traceId?: string,
+    attrs: LogAttributes = {}
+  ): void {
+    this.write(
+      "warning",
+      event,
+      message,
+      traceId,
+      attrs
+    );
+  }
+
+
+  // ==========================================================
+  // ERROR
+  // ==========================================================
+
+  public error(
+    event: string,
+    message?: string,
+    traceId?: string,
+    attrs: LogAttributes = {}
+  ): void {
+    this.write(
+      "error",
+      event,
+      message,
+      traceId,
+      attrs
+    );
+  }
+
+
+  // ==========================================================
+  // CORE LOGGING
+  // ==========================================================
+
+  private write(
+    level: LogLevel,
+    event: string,
+    message?: string,
+    traceId?: string,
+    attrs: LogAttributes = {}
+  ): void {
+
+    // --------------------------------------------------------
+    // Check minimum level
+    // --------------------------------------------------------
+
+    if (!this.shouldLog(level)) {
+      return;
+    }
+
+
+    // --------------------------------------------------------
+    // Build standard log entry
+    // --------------------------------------------------------
+
+    const logEntry: LogEntry = {
+      ts: new Date().toISOString(),
+
+      level,
+
+      event,
+
+      service: this.service,
+
+      application: this.application,
+
+      environment: this.environment,
+
+      host: this.host,
+
+      session_id: this.sessionId,
+
+      ...(traceId !== undefined && {
+        trace_id: traceId,
+      }),
+
+      schema_version: this.schemaVersion,
+
+      ...(message !== undefined && {
+        message,
+      }),
+
+      attrs,
+    };
+
+
+    // --------------------------------------------------------
+    // Console output
+    // --------------------------------------------------------
+
+    if (this.consoleEnabled) {
+      this.writeToConsole(
+        level,
+        logEntry
+      );
+    }
+
+    // --------------------------------------------------------
+    // Future Phase
+    // --------------------------------------------------------
+    //
+    // This is where we can later add:
+    //
+    // sendToBackend(logEntry)
+    //
+    // or:
+    //
+    // sendToLogCollector(logEntry)
+    //
+    // Fluent Bit can eventually collect/forward these
+    // structured logs.
+    //
+    // --------------------------------------------------------
+  }
+
+
+  // ==========================================================
+  // CONSOLE
+  // ==========================================================
+
+  private writeToConsole(
+    level: LogLevel,
+    logEntry: LogEntry
+  ): void {
+
+    const output =
+      JSON.stringify(logEntry);
+
+
+    switch (level) {
+
+      case "debug":
+        console.debug(output);
+        break;
+
+      case "info":
+        console.info(output);
+        break;
+
+      case "warning":
+        console.warn(output);
+        break;
+
+      case "error":
+        console.error(output);
+        break;
+
+      default:
+        console.log(output);
+    }
+  }
+
+
+  // ==========================================================
+  // LOG LEVEL FILTERING
+  // ==========================================================
+
+  private shouldLog(
+    level: LogLevel
+  ): boolean {
+
+    const levels: Record<
+      LogLevel,
+      number
+    > = {
+      debug: 10,
+      info: 20,
+      warning: 30,
+      error: 40,
+    };
+
+    return (
+      levels[level] >=
+      levels[this.minLevel]
+    );
+  }
+
+
+  // ==========================================================
+  // SESSION ID
+  // ==========================================================
+
+  private generateSessionId(): string {
+
+    const timestamp =
+      new Date()
+        .toISOString()
+        .replace(
+          /[-:.TZ]/g,
+          ""
+        );
+
+    return [
+      this.service,
+      timestamp,
+      this.randomId(),
+    ].join(".");
+  }
+
+
+  // ==========================================================
+  // CLIENT / HOST IDENTIFIER
+  // ==========================================================
+
+  private getClientHost(): string {
+
+    /**
+     * Browser applications do not have access to the actual
+     * server hostname/IP in a reliable way.
+     *
+     * Therefore we use a browser/client identifier here.
+     *
+     * When logs are generated by a backend service, the host
+     * can be explicitly supplied through LoggerConfig.
+     */
+
+    if (typeof window === "undefined") {
+      return "unknown";
+    }
+
+    const browserHost =
+      window.location.hostname;
+
+    return browserHost || "browser";
+  }
+
+
+  // ==========================================================
+  // RANDOM ID
+  // ==========================================================
+
+  private randomId(): string {
+
+    if (
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+    ) {
+      return crypto.randomUUID();
+    }
+
+    return Math.random()
+      .toString(36)
+      .substring(2, 14);
+  }
+}
+
+
+// ============================================================
+// SINGLE LOGGER INSTANCE
+// ============================================================
+
+const logger = new LoggerService({
+  service: "sda-query-builder",
+
+  application: "SDA",
+
+  environment:
+    import.meta.env?.MODE ??
+    "development",
+
+  schemaVersion: 1,
+
+  consoleEnabled: true,
+
+  minLevel: "debug",
+});
+
+
+export default logger;
+```
