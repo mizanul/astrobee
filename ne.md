@@ -438,3 +438,32 @@ getLogInfo(
 )
 ```
 
+
+```
+{
+  "ts": "2026-08-13T13:45:21.123Z",
+  "level": "info",
+  "event": "filter.removed",
+
+  "service": "sda-query-builder",
+  "application": "SDA",
+  "host": "hostname-or-address",
+
+  "session_id": "is3001.GLDBAE054631.20260806T125114.v0.1.1.x6J8",
+  "trace_id": "xxxx",
+
+  "schema_version": 1,
+
+  "message": "User removed filter",
+
+  "attrs": {
+    "component": "FilterRow",
+    "operation": "filter.removed",
+    "filter_id": "filter-123",
+    "filter_type": "dropdown",
+    "source_cube": "Sales",
+    "source_field": "Country"
+  }
+}
+```
+
