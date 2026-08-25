@@ -1035,3 +1035,131 @@ const logger = new LoggerService({
 
 export default logger;
 ```
+
+
+---
+
+
+### Suggested task description
+
+**Task: Add application logging to React components**
+
+> Add appropriate `logger.info()`, `logger.warn()`, and `logger.debug()` statements to the assigned React components using the existing `loggerService`.
+>
+> Logging should capture important application events, user actions, state transitions, and unexpected/non-fatal conditions that are useful for troubleshooting and operational monitoring.
+>
+> Do not add logging for every render, routine state update, or insignificant UI event. Avoid logging sensitive information such as passwords, authentication tokens, personal information, or confidential data.
+
+### What to say for each component
+
+You can create a subtask for each component using this template:
+
+**Component: `<ComponentName>` — Add application logging**
+
+> Review `<ComponentName>` and add appropriate logging using the existing `loggerService`.
+>
+> Add:
+>
+> * `logger.info()` for significant user/application actions or successful workflow milestones.
+> * `logger.debug()` for useful diagnostic information needed to troubleshoot the component.
+> * `logger.warn()` for unexpected or recoverable conditions that do not prevent the application from continuing.
+> * `logger.error()` where an actual error/failure is caught and requires investigation.
+>
+> Logging should provide enough context to understand **what happened, where it happened, and relevant non-sensitive identifiers/context**, without exposing sensitive information.
+>
+> Avoid excessive logging, especially logs executed on every React render or every state change.
+
+For example:
+
+**Component: `LabDashboard.jsx` — Add application logging**
+
+> Add appropriate application logging to `LabDashboard.jsx` using `loggerService`.
+>
+> Log significant events such as:
+>
+> * Dashboard initialization/loading.
+> * Lab selection.
+> * Successful lab data retrieval.
+> * Recoverable conditions such as missing/invalid lab data.
+> * API or processing failures.
+> * Important user actions that affect application state.
+>
+> Use appropriate log levels and include sufficient context for troubleshooting.
+
+---
+
+# Exit Criteria
+
+I would make the exit criteria measurable rather than simply saying "logging has been added."
+
+### Recommended exit criteria
+
+* [ ] All assigned components have been reviewed for appropriate logging opportunities.
+* [ ] Existing `loggerService` is used; no new logging framework is introduced.
+* [ ] `logger.info()` is used for significant application/user workflow events.
+* [ ] `logger.debug()` is used only for useful diagnostic information.
+* [ ] `logger.warn()` is used for unexpected but recoverable conditions.
+* [ ] `logger.error()` is used for actual application/API errors where applicable.
+* [ ] Logs contain sufficient contextual information to identify the component and operation.
+* [ ] No passwords, tokens, credentials, or other sensitive information are logged.
+* [ ] No excessive logs are generated from component rendering or frequently changing state.
+* [ ] Existing application behavior is unchanged.
+* [ ] Existing tests continue to pass.
+* [ ] New/modified logging does not introduce console errors or runtime exceptions.
+* [ ] Logging has been verified in the applicable development/test environment.
+* [ ] Code passes linting/formatting/static analysis.
+* [ ] PR/code review is completed and approved.
+
+### A stronger engineering-oriented exit criterion
+
+I'd particularly recommend adding this:
+
+> **For each assigned component, the logs must allow a developer reviewing the application logs to reconstruct the important workflow of the component without needing to reproduce the issue locally.**
+
+That gives your team a much better definition of **"good logging"** than "add 3–5 logger statements."
+
+---
+
+## Example Jira ticket
+
+**Title**
+
+> Add application logging to `<ComponentName>`
+
+**Description**
+
+> Review `<ComponentName>` and implement appropriate application logging using the existing `loggerService`.
+>
+> Logging should capture significant user actions, application workflow milestones, recoverable conditions, and errors that are useful for troubleshooting and operational monitoring.
+>
+> Use the appropriate log level:
+>
+> * **INFO** — significant application/user workflow events.
+> * **DEBUG** — diagnostic information useful during troubleshooting.
+> * **WARN** — unexpected/recoverable conditions.
+> * **ERROR** — failures/exceptions requiring investigation.
+>
+> Do not log every component render or routine state change. Do not log sensitive information such as credentials, authentication tokens, passwords, or confidential user data.
+
+**Exit Criteria**
+
+> 1. Appropriate logging has been added to all significant workflows in the component.
+> 2. Log levels are appropriate for the event being logged.
+> 3. Logs contain enough context to identify the component and operation.
+> 4. No sensitive information is logged.
+> 5. No unnecessary/excessive logging is introduced.
+> 6. Existing functionality and behavior remain unchanged.
+> 7. Existing unit/integration tests pass.
+> 8. Linting/build succeeds.
+> 9. Logging has been verified in the development/test environment.
+> 10. Code review is completed.
+
+### One important recommendation
+
+Don't make the requirement **"every component must have `info`, `warn`, and `debug`."** That tends to create meaningless logs.
+
+Instead, make the requirement:
+
+> **"Each component must have appropriate logging at the appropriate level based on its behavior."**
+
+
