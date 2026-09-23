@@ -1,100 +1,822 @@
-Yes. For your logging framework, I would unit-test **three things separately**:
+I would test these as **two separate unit-test files**:
 
-1. `LoggerService` creates the correct log structure.
-2. `events.ts` contains the expected event names.
-3. `loggingHelpers.ts` correctly converts application objects into `attrs`.
+* `LoggerService.test.ts` — test session IDs, trace IDs, log levels, filtering, log structure, console methods, browser host detection.
+* `loggingHelpers.test.ts` — test the three pure helper functions independently.
 
-For Phase 1, **Jest + React Testing Library's ecosystem** is perfectly reasonable, although the logger itself doesn't need React Testing Library because it isn't a React component.
+One important point first: your `LoggerService.ts` currently exports only the **singleton**:
 
-Assuming your project uses Jest, here's a good setup.
+```ts
+export default logger;
+```
+
+That makes it harder to test different configurations such as `minLevel: "error"` or `consoleEnabled: false`.
+
+I recommend exporting the class as well.
+
+### 1. Small change to `LoggerService.ts`
+
+Change:
+
+```ts
+class LoggerService {
+```
+
+to:
+
+```ts
+export class LoggerService {
+```
+
+Keep this at the bottom:
+
+```ts
+const logger = new LoggerService({
+  service: "sda-query-builder",
+  application: "SDA",
+  environment:
+    import.meta.env?.MODE ??
+    "development",
+  schemaVersion: 1,
+  consoleEnabled: true,
+  minLevel: "debug",
+});
+
+export default logger;
+```
+
+This lets your application continue using:
+
+```ts
+import logger from "./LoggerService";
+```
+
+while tests can do:
+
+```ts
+import { LoggerService } from "./LoggerService";
+```
 
 ---
 
-# 1. Test the `LoggerService`
+# 2. Vitest setup
 
-Create:
+If you already have Vitest installed, you can skip the installation.
+
+Otherwise:
+
+```bash
+npm install -D vitest jsdom
+```
+
+If this is a Vite React project, you probably already have most of this.
+
+Your `package.json` can contain:
+
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  }
+}
+```
+
+I recommend `jsdom` because `LoggerService` contains:
+
+```ts
+window.location.hostname
+```
+
+---
+
+# 3. Vitest configuration
+
+If you have `vite.config.ts`, add the test configuration there:
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+
+  test: {
+    environment: "jsdom",
+    globals: true,
+    clearMocks: true,
+  },
+});
+```
+
+If you don't want to put testing configuration into your Vite config, create `vitest.config.ts` instead.
+
+---
+
+# 4. Test `LoggerService`
+
+I would create:
 
 ```text
 src/
 ├── services/
-│   └── logging/
-│       ├── LoggerService.ts
-│       ├── events.ts
-│       ├── loggingHelpers.ts
-│       └── index.ts
+│   ├── LoggerService.ts
+│   └── LoggerService.test.ts
 │
-└── services/
-    └── logging/
-        └── LoggerService.test.ts
+└── utils/
+    ├── loggingHelpers.ts
+    └── loggingHelpers.test.ts
 ```
+
+Adjust the paths to your actual project structure.
 
 ## `LoggerService.test.ts`
 
-```typescript
-import logger from "./LoggerService";
+Here is a fairly complete test suite for your implementation:
+
+```ts
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+import { LoggerService } from "./LoggerService";
 
 describe("LoggerService", () => {
-  let consoleSpy: jest.SpyInstance;
-
   beforeEach(() => {
-    consoleSpy = jest
-      .spyOn(console, "log")
-      .mockImplementation(() => {});
+    vi.restoreAllMocks();
 
-    logger.startSession();
+    vi.spyOn(Date.prototype, "toISOString")
+      .mockReturnValue("2026-09-23T12:00:00.000Z");
   });
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    vi.restoreAllMocks();
   });
 
-  test("should create a session ID", () => {
-    const sessionId = logger.getSessionId();
 
-    expect(sessionId).toBeDefined();
-    expect(sessionId).not.toBe("");
+  // ==========================================================
+  // CONSTRUCTOR
+  // ==========================================================
+
+  describe("constructor", () => {
+    it("creates a logger with the supplied configuration", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        host: "test-host",
+        schemaVersion: 2,
+        consoleEnabled: false,
+        minLevel: "info",
+      });
+
+      expect(logger.getSessionId()).toContain("test-service.");
+    });
+
+
+    it("uses the supplied host", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        host: "my-test-host",
+        consoleEnabled: false,
+      });
+
+      const consoleSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
   });
 
-  test("should create a trace ID", () => {
-    const traceId = logger.newTraceId();
 
-    expect(traceId).toBeDefined();
-    expect(traceId).not.toBe("");
+  // ==========================================================
+  // SESSION
+  // ==========================================================
+
+  describe("session", () => {
+    it("creates a session ID", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
+
+      const sessionId = logger.getSessionId();
+
+      expect(sessionId).toBeTruthy();
+      expect(sessionId).toContain("test-service.");
+    });
+
+
+    it("returns the same session ID until a new session starts", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
+
+      const session1 = logger.getSessionId();
+      const session2 = logger.getSessionId();
+
+      expect(session2).toBe(session1);
+    });
+
+
+    it("creates a new session when startSession is called", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
+
+      const originalSession = logger.getSessionId();
+
+      const newSession = logger.startSession();
+
+      expect(newSession).toBe(logger.getSessionId());
+      expect(newSession).not.toBe(originalSession);
+    });
   });
 
-  test("should log an info event", () => {
-    const traceId = logger.newTraceId();
 
-    logger.info(
-      "filter.created",
-      "User created filter",
-      traceId,
-      {
-        field: "Country",
-        operator: "=",
-        value: "USA",
-      }
-    );
+  // ==========================================================
+  // TRACE
+  // ==========================================================
 
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
+  describe("trace IDs", () => {
+    it("generates a trace ID", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
 
-    const logEntry = consoleSpy.mock.calls[0][0];
+      const traceId = logger.newTraceId();
 
-    expect(logEntry).toEqual(
-      expect.objectContaining({
-        event: "filter.created",
-        level: "info",
-        message: "User created filter",
-        session_id: logger.getSessionId(),
-        trace_id: traceId,
-        schema_version: 1,
-      })
-    );
+      expect(traceId).toBeTruthy();
+      expect(traceId).toContain(logger.getSessionId());
+    });
 
-    expect(logEntry.attrs).toEqual({
-      field: "Country",
-      operator: "=",
-      value: "USA",
+
+    it("generates different trace IDs", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
+
+      const trace1 = logger.newTraceId();
+      const trace2 = logger.newTraceId();
+
+      expect(trace1).not.toBe(trace2);
+    });
+  });
+
+
+  // ==========================================================
+  // DEBUG
+  // ==========================================================
+
+  describe("debug", () => {
+    it("writes a debug log", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        host: "test-host",
+        schemaVersion: 3,
+        consoleEnabled: true,
+        minLevel: "debug",
+      });
+
+      const debugSpy = vi
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      logger.debug(
+        "filter.created",
+        "Filter created"
+      );
+
+      expect(debugSpy).toHaveBeenCalledTimes(1);
+
+      const output = debugSpy.mock.calls[0][0];
+
+      const entry = JSON.parse(output);
+
+      expect(entry.level).toBe("debug");
+      expect(entry.event).toBe("filter.created");
+      expect(entry.message).toBe("Filter created");
+
+      expect(entry.service).toBe("test-service");
+      expect(entry.application).toBe("TEST");
+      expect(entry.environment).toBe("test");
+      expect(entry.host).toBe("test-host");
+
+      expect(entry.schema_version).toBe(3);
+      expect(entry.session_id).toBe(logger.getSessionId());
+
+      expect(entry.ts).toBe("2026-09-23T12:00:00.000Z");
+      expect(entry.attrs).toEqual({});
+    });
+  });
+
+
+  // ==========================================================
+  // INFO
+  // ==========================================================
+
+  describe("info", () => {
+    it("writes an info log", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "debug",
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "filter.created",
+        "Filter created",
+        "trace-123",
+        {
+          filter_count: 3,
+        }
+      );
+
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(
+        infoSpy.mock.calls[0][0]
+      );
+
+      expect(entry.level).toBe("info");
+      expect(entry.event).toBe("filter.created");
+      expect(entry.message).toBe("Filter created");
+      expect(entry.trace_id).toBe("trace-123");
+
+      expect(entry.attrs).toEqual({
+        filter_count: 3,
+      });
+    });
+  });
+
+
+  // ==========================================================
+  // WARNING
+  // ==========================================================
+
+  describe("warning", () => {
+    it("writes a warning using console.warn", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "debug",
+      });
+
+      const warnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      logger.warning(
+        "filter.options.failed",
+        "Unable to load options"
+      );
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(
+        warnSpy.mock.calls[0][0]
+      );
+
+      expect(entry.level).toBe("warning");
+      expect(entry.event).toBe(
+        "filter.options.failed"
+      );
+    });
+  });
+
+
+  // ==========================================================
+  // ERROR
+  // ==========================================================
+
+  describe("error", () => {
+    it("writes an error using console.error", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "debug",
+      });
+
+      const errorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      logger.error(
+        "cube_api.request.failed",
+        "Cube API request failed",
+        "trace-123",
+        {
+          status: 500,
+          endpoint: "/cube/load",
+        }
+      );
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(
+        errorSpy.mock.calls[0][0]
+      );
+
+      expect(entry.level).toBe("error");
+      expect(entry.event).toBe(
+        "cube_api.request.failed"
+      );
+
+      expect(entry.message).toBe(
+        "Cube API request failed"
+      );
+
+      expect(entry.trace_id).toBe("trace-123");
+
+      expect(entry.attrs).toEqual({
+        status: 500,
+        endpoint: "/cube/load",
+      });
+    });
+  });
+
+
+  // ==========================================================
+  // ATTRIBUTES
+  // ==========================================================
+
+  describe("attributes", () => {
+    it("includes supplied attributes", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "test.event",
+        undefined,
+        undefined,
+        {
+          page: 1,
+          count: 25,
+          active: true,
+          nested: {
+            value: "hello",
+          },
+        }
+      );
+
+      const entry = JSON.parse(
+        infoSpy.mock.calls[0][0]
+      );
+
+      expect(entry.attrs).toEqual({
+        page: 1,
+        count: 25,
+        active: true,
+        nested: {
+          value: "hello",
+        },
+      });
+    });
+  });
+
+
+  // ==========================================================
+  // TRACE IN LOG ENTRY
+  // ==========================================================
+
+  describe("trace ID in log entry", () => {
+    it("includes trace_id when supplied", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "operation.started",
+        "Operation started",
+        "trace-abc"
+      );
+
+      const entry = JSON.parse(
+        infoSpy.mock.calls[0][0]
+      );
+
+      expect(entry.trace_id).toBe("trace-abc");
+    });
+
+
+    it("does not include trace_id when omitted", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "operation.started"
+      );
+
+      const entry = JSON.parse(
+        infoSpy.mock.calls[0][0]
+      );
+
+      expect(entry).not.toHaveProperty(
+        "trace_id"
+      );
+    });
+  });
+
+
+  // ==========================================================
+  // MESSAGE
+  // ==========================================================
+
+  describe("message", () => {
+    it("does not include message when omitted", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      const entry = JSON.parse(
+        infoSpy.mock.calls[0][0]
+      );
+
+      expect(entry).not.toHaveProperty(
+        "message"
+      );
+    });
+  });
+
+
+  // ==========================================================
+  // CONSOLE ENABLED
+  // ==========================================================
+
+  describe("console output", () => {
+    it("does not write to console when disabled", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      expect(infoSpy).not.toHaveBeenCalled();
+    });
+
+
+    it("writes to console when enabled", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+
+  // ==========================================================
+  // MINIMUM LOG LEVEL
+  // ==========================================================
+
+  describe("minimum log level", () => {
+    it("logs everything when minLevel is debug", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "debug",
+      });
+
+      const debugSpy = vi
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const warnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const errorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      logger.debug("debug.event");
+      logger.info("info.event");
+      logger.warning("warning.event");
+      logger.error("error.event");
+
+      expect(debugSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    });
+
+
+    it("suppresses debug when minLevel is info", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "info",
+      });
+
+      const debugSpy = vi
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.debug("debug.event");
+      logger.info("info.event");
+
+      expect(debugSpy).not.toHaveBeenCalled();
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+
+
+    it("logs warning and error when minLevel is warning", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "warning",
+      });
+
+      const debugSpy = vi
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const warnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const errorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      logger.debug("debug.event");
+      logger.info("info.event");
+      logger.warning("warning.event");
+      logger.error("error.event");
+
+      expect(debugSpy).not.toHaveBeenCalled();
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    });
+
+
+    it("logs only errors when minLevel is error", () => {
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: true,
+        minLevel: "error",
+      });
+
+      const debugSpy = vi
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const warnSpy = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const errorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      logger.debug("debug.event");
+      logger.info("info.event");
+      logger.warning("warning.event");
+      logger.error("error.event");
+
+      expect(debugSpy).not.toHaveBeenCalled();
+      expect(infoSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+
+  // ==========================================================
+  // BROWSER HOST
+  // ==========================================================
+
+  describe("browser host", () => {
+    it("uses window.location.hostname when host is not supplied", () => {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: {
+          hostname: "qa.stemx365.org",
+        },
+      });
+
+      const logger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "qa",
+        consoleEnabled: true,
+      });
+
+      const infoSpy = vi
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      const entry = JSON.parse(
+        infoSpy.mock.calls[0][0]
+      );
+
+      expect(entry.host).toBe(
+        "qa.stemx365.org"
+      );
     });
   });
 });
@@ -102,63 +824,9 @@ describe("LoggerService", () => {
 
 ---
 
-# 2. Test the Event Names
+# 5. Test `loggingHelpers.ts`
 
-Create:
-
-```text
-events.test.ts
-```
-
-```typescript
-import { ev } from "./events";
-
-describe("Logging Events", () => {
-  test("filter events should use dot notation", () => {
-    expect(ev.filter.created).toBe("filter.created");
-    expect(ev.filter.updated).toBe("filter.updated");
-    expect(ev.filter.removed).toBe("filter.removed");
-    expect(ev.filter.cleared).toBe("filter.cleared");
-  });
-
-  test("query events should use dot notation", () => {
-    expect(ev.query.generated).toBe("query.generated");
-
-    expect(
-      ev.query.execution.started
-    ).toBe("query.execution.started");
-
-    expect(
-      ev.query.execution.completed
-    ).toBe("query.execution.completed");
-
-    expect(
-      ev.query.execution.failed
-    ).toBe("query.execution.failed");
-  });
-});
-```
-
-This test is actually useful because your event naming convention is part of your logging contract.
-
----
-
-# 3. Test `getFilterInfo()`
-
-Suppose your helper is:
-
-```typescript
-export function getFilterInfo(filter: any) {
-  return {
-    filter_id: filter.id,
-    filter_type: filter.type,
-    source_cube: filter.cube,
-    source_field: filter.field,
-    operator: filter.operator,
-    value: filter.value,
-  };
-}
-```
+This one is much simpler because your functions are pure functions.
 
 Create:
 
@@ -166,553 +834,540 @@ Create:
 loggingHelpers.test.ts
 ```
 
-```typescript
-import { getFilterInfo } from "./loggingHelpers";
+with:
 
-describe("getFilterInfo", () => {
-  test("should create logging attributes from a filter", () => {
-    const filter = {
-      id: "filter-123",
-      type: "dropdown",
-      cube: "Sales",
-      field: "Country",
-      operator: "=",
-      value: "USA",
-    };
-
-    const result = getFilterInfo(filter);
-
-    expect(result).toEqual({
-      filter_id: "filter-123",
-      filter_type: "dropdown",
-      source_cube: "Sales",
-      source_field: "Country",
-      operator: "=",
-      value: "USA",
-    });
-  });
-});
-```
-
----
-
-# 4. Test the Actual Usage Pattern
-
-This is probably the **most important test for your Phase 1 exploration**.
-
-You want to verify that this:
-
-```typescript
-logger.info(
-  ev.filter.created,
-  "User added Country filter",
-  traceId,
-  {
-    ...getFilterInfo(filter),
-    page: "Dashboard",
-  }
-);
-```
-
-produces the expected log.
-
-```typescript
-import logger from "./LoggerService";
-import { ev } from "./events";
-import { getFilterInfo } from "./loggingHelpers";
-
-describe("Filter Logging", () => {
-  let consoleSpy: jest.SpyInstance;
-
-  beforeEach(() => {
-    consoleSpy = jest
-      .spyOn(console, "log")
-      .mockImplementation(() => {});
-
-    logger.startSession();
-  });
-
-  afterEach(() => {
-    consoleSpy.mockRestore();
-  });
-
-  test("should log filter.created event", () => {
-    const filter = {
-      id: "filter-001",
-      type: "dropdown",
-      cube: "Sales",
-      field: "Country",
-      operator: "=",
-      value: "USA",
-    };
-
-    const traceId = logger.newTraceId();
-
-    logger.info(
-      ev.filter.created,
-      "User added Country filter",
-      traceId,
-      {
-        ...getFilterInfo(filter),
-        page: "Dashboard",
-      }
-    );
-
-    const logEntry = consoleSpy.mock.calls[0][0];
-
-    expect(logEntry.event).toBe(
-      "filter.created"
-    );
-
-    expect(logEntry.level).toBe(
-      "info"
-    );
-
-    expect(logEntry.trace_id).toBe(
-      traceId
-    );
-
-    expect(logEntry.attrs).toEqual({
-      filter_id: "filter-001",
-      filter_type: "dropdown",
-      source_cube: "Sales",
-      source_field: "Country",
-      operator: "=",
-      value: "USA",
-      page: "Dashboard",
-    });
-  });
-});
-```
-
----
-
-# 5. What You're Actually Testing
-
-You don't want to test that:
-
-> `console.log()` works.
-
-The browser already knows how to do that.
-
-You're testing that your **logging contract** is correct.
-
-For example:
-
-```text
-                    Test
-                     |
-                     v
-             LoggerService
-                     |
-       ┌─────────────┼─────────────┐
-       │             │             │
-       v             v             v
-   event          trace_id       attrs
-       │             │             │
-       v             v             v
-filter.created     ABC123       filter data
-```
-
----
-
-# 6. Important Tests for Your Logger
-
-I'd create these tests for Phase 1:
-
-| Test                           | Purpose                   |
-| ------------------------------ | ------------------------- |
-| `creates session ID`           | Session tracking          |
-| `creates trace ID`             | Request/workflow tracking |
-| `logs info event`              | Basic logging             |
-| `logs debug event`             | Debug logging             |
-| `logs warning event`           | Warning logging           |
-| `logs error event`             | Error logging             |
-| `includes timestamp`           | Required metadata         |
-| `includes schema_version`      | Schema versioning         |
-| `includes session_id`          | Session correlation       |
-| `includes trace_id`            | Trace correlation         |
-| `preserves attrs`              | Flexible attributes       |
-| `supports dot notation events` | Event convention          |
-
----
-
-# 7. One Particularly Important Test
-
-Since your architecture depends on `attrs` being an **opaque object**, test that the LoggerService does **not modify it**.
-
-```typescript
-test("should preserve arbitrary attributes", () => {
-  const attrs = {
-    filter_id: "123",
-    something_new: "hello",
-    nested: {
-      value: 100,
-    },
-    anotherField: true,
-  };
-
-  const traceId = logger.newTraceId();
-
-  logger.info(
-    "filter.created",
-    "Test",
-    traceId,
-    attrs
-  );
-
-  const logEntry = consoleSpy.mock.calls[0][0];
-
-  expect(logEntry.attrs).toEqual(attrs);
-});
-```
-
-This is important because your lead's architecture specifically depends on `attrs` being flexible.
-
----
-
-# 8. Testing Error Logging
-
-```typescript
-test("should log error events", () => {
-  const traceId = logger.newTraceId();
-
-  logger.error(
-    "query.execution.failed",
-    "Cube query failed",
-    traceId,
-    {
-      statusCode: 500,
-      errorCode: "CUBE_TIMEOUT",
-    }
-  );
-
-  const logEntry = consoleSpy.mock.calls[0][0];
-
-  expect(logEntry.event).toBe(
-    "query.execution.failed"
-  );
-
-  expect(logEntry.level).toBe(
-    "error"
-  );
-
-  expect(logEntry.attrs).toEqual({
-    statusCode: 500,
-    errorCode: "CUBE_TIMEOUT",
-  });
-});
-```
-
----
-
-# 9. Run the Tests
-
-Depending on your project setup:
-
-```bash
-npm test
-```
-
-or:
-
-```bash
-npm test -- LoggerService.test.ts
-```
-
-If you're using Jest directly:
-
-```bash
-npx jest LoggerService.test.ts
-```
-
----
-
-## What I would deliver for your one-day task
-
-For the current exploration, you don't need dozens of tests.
-
-I'd implement **5–8 focused unit tests** proving:
-
-```text
-✓ Session ID is created
-✓ Trace ID is created
-✓ filter.created produces correct event
-✓ filter.updated produces correct event
-✓ query.execution.started produces correct event
-✓ query.execution.failed produces correct event
-✓ attrs remain flexible
-✓ required metadata is present
-```
-
-That demonstrates that the proposed logging architecture actually works, rather than merely showing that `console.log()` was called.
-
-
-
-
-
-
-
-
-
-
-============VITEST===========
-
-
-Ah, that explains it. With **Vite**, I recommend using **Vitest**, rather than trying to configure Jest. Vitest is designed to work with Vite and understands TypeScript/React much more naturally.
-
-For your logging unit tests, this is the cleanest approach.
-
-## 1. Install Vitest
-
-Run:
-
-```bash
-npm install -D vitest
-```
-
-If you are testing React components later, you can also add:
-
-```bash
-npm install -D @testing-library/react @testing-library/jest-dom jsdom
-```
-
-But **you don't need those for `LoggerService`**.
-
----
-
-## 2. Add Vitest configuration
-
-If you already have `vite.config.ts`, you can add the test configuration there.
-
-For example:
-
-```typescript
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  plugins: [react()],
-
-  test: {
-    globals: true,
-    environment: "node",
-  },
-});
-```
-
-Since `LoggerService` uses browser APIs such as `crypto`, `window`, and potentially `navigator`, you may prefer `jsdom`:
-
-```bash
-npm install -D jsdom
-```
-
-Then:
-
-```typescript
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  plugins: [react()],
-
-  test: {
-    globals: true,
-    environment: "jsdom",
-  },
-});
-```
-
----
-
-## 3. Important: install the Vite plugin if needed
-
-Your existing `vite.config.ts` probably already has:
-
-```typescript
-import react from "@vitejs/plugin-react";
-```
-
-So you probably already have it.
-
-Don't install it again if it already exists.
-
----
-
-# 4. Change your test
-
-With Vitest, I recommend importing the testing functions explicitly rather than relying on globals.
-
-```typescript
+```ts
 import {
   describe,
-  test,
+  it,
   expect,
+  vi,
   beforeEach,
   afterEach,
-  vi,
 } from "vitest";
 
-import logger from "./LoggerService";
+import {
+  getLogInfo,
+  getErrorInfo,
+  getPerformanceInfo,
+} from "./loggingHelpers";
 
-describe("LoggerService", () => {
-  let consoleSpy: ReturnType<typeof vi.spyOn>;
 
-  beforeEach(() => {
-    consoleSpy = vi
-      .spyOn(console, "log")
-      .mockImplementation(() => {});
+describe("loggingHelpers", () => {
 
-    logger.startSession();
+  // ==========================================================
+  // getLogInfo
+  // ==========================================================
+
+  describe("getLogInfo", () => {
+
+    it("returns component", () => {
+      expect(
+        getLogInfo("FilterOptions")
+      ).toEqual({
+        component: "FilterOptions",
+      });
+    });
+
+
+    it("includes operation when supplied", () => {
+      expect(
+        getLogInfo(
+          "FilterOptions",
+          "options.fetch"
+        )
+      ).toEqual({
+        component: "FilterOptions",
+        operation: "options.fetch",
+      });
+    });
+
+
+    it("includes custom attributes", () => {
+      expect(
+        getLogInfo(
+          "FilterOptions",
+          "options.fetch",
+          {
+            page: 1,
+            count: 25,
+          }
+        )
+      ).toEqual({
+        component: "FilterOptions",
+        operation: "options.fetch",
+        page: 1,
+        count: 25,
+      });
+    });
+
+
+    it("works without operation but with attributes", () => {
+      expect(
+        getLogInfo(
+          "CubeAPI",
+          undefined,
+          {
+            endpoint: "/cube/load",
+          }
+        )
+      ).toEqual({
+        component: "CubeAPI",
+        endpoint: "/cube/load",
+      });
+    });
+
+
+    it("does not add operation when undefined", () => {
+      const result = getLogInfo(
+        "FilterSerializer",
+        undefined
+      );
+
+      expect(result).not.toHaveProperty(
+        "operation"
+      );
+    });
+
+
+    it("handles empty attributes", () => {
+      expect(
+        getLogInfo(
+          "FilterOptions",
+          "fetch",
+          {}
+        )
+      ).toEqual({
+        component: "FilterOptions",
+        operation: "fetch",
+      });
+    });
   });
 
-  afterEach(() => {
-    consoleSpy.mockRestore();
+
+  // ==========================================================
+  // getErrorInfo
+  // ==========================================================
+
+  describe("getErrorInfo", () => {
+
+    it("returns empty object for null", () => {
+      expect(
+        getErrorInfo(null)
+      ).toEqual({});
+    });
+
+
+    it("returns empty object for undefined", () => {
+      expect(
+        getErrorInfo(undefined)
+      ).toEqual({});
+    });
+
+
+    it("handles Error objects", () => {
+      const error = new Error(
+        "Something went wrong"
+      );
+
+      const result = getErrorInfo(error);
+
+      expect(result.error_name).toBe(
+        "Error"
+      );
+
+      expect(result.error_message).toBe(
+        "Something went wrong"
+      );
+
+      expect(result.error_stack).toBe(
+        error.stack
+      );
+    });
+
+
+    it("handles custom Error types", () => {
+      const error = new TypeError(
+        "Invalid value"
+      );
+
+      const result = getErrorInfo(error);
+
+      expect(result.error_name).toBe(
+        "TypeError"
+      );
+
+      expect(result.error_message).toBe(
+        "Invalid value"
+      );
+
+      expect(result.error_stack).toBe(
+        error.stack
+      );
+    });
+
+
+    it("handles string errors", () => {
+      expect(
+        getErrorInfo("Request failed")
+      ).toEqual({
+        error_message: "Request failed",
+      });
+    });
+
+
+    it("handles numeric errors", () => {
+      expect(
+        getErrorInfo(500)
+      ).toEqual({
+        error: 500,
+      });
+    });
+
+
+    it("handles object errors", () => {
+      const error = {
+        code: "CUBE_ERROR",
+        status: 500,
+      };
+
+      expect(
+        getErrorInfo(error)
+      ).toEqual({
+        error,
+      });
+    });
+
+
+    it("handles boolean errors", () => {
+      expect(
+        getErrorInfo(false)
+      ).toEqual({});
+    });
   });
 
-  test("should create a session ID", () => {
-    const sessionId = logger.getSessionId();
 
-    expect(sessionId).toBeDefined();
-    expect(sessionId).not.toBe("");
-  });
+  // ==========================================================
+  // getPerformanceInfo
+  // ==========================================================
 
-  test("should create a trace ID", () => {
-    const traceId = logger.newTraceId();
+  describe("getPerformanceInfo", () => {
 
-    expect(traceId).toBeDefined();
-    expect(traceId).not.toBe("");
-  });
+    beforeEach(() => {
+      vi.spyOn(performance, "now")
+        .mockReturnValue(1500);
+    });
 
-  test("should log an info event", () => {
-    const traceId = logger.newTraceId();
 
-    logger.info(
-      "filter.created",
-      "User created filter",
-      traceId,
-      {
-        field: "Country",
-        operator: "=",
-        value: "USA",
-      }
-    );
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
 
-    expect(consoleSpy).toHaveBeenCalledTimes(1);
 
-    const logEntry = consoleSpy.mock.calls[0][0];
+    it("calculates duration", () => {
+      const result =
+        getPerformanceInfo(1000);
 
-    expect(logEntry).toEqual(
-      expect.objectContaining({
-        event: "filter.created",
-        level: "info",
-        message: "User created filter",
-        session_id: logger.getSessionId(),
-        trace_id: traceId,
-        schema_version: 1,
-      })
-    );
+      expect(result.duration_ms).toBe(
+        500
+      );
+    });
 
-    expect(logEntry.attrs).toEqual({
-      field: "Country",
-      operator: "=",
-      value: "USA",
+
+    it("includes additional attributes", () => {
+      const result =
+        getPerformanceInfo(
+          1000,
+          {
+            operation: "cube.load",
+            endpoint: "/cube/load",
+          }
+        );
+
+      expect(result).toEqual({
+        duration_ms: 500,
+        operation: "cube.load",
+        endpoint: "/cube/load",
+      });
+    });
+
+
+    it("handles zero start time", () => {
+      const result =
+        getPerformanceInfo(0);
+
+      expect(result.duration_ms).toBe(
+        1500
+      );
+    });
+
+
+    it("handles empty attributes", () => {
+      const result =
+        getPerformanceInfo(
+          1000,
+          {}
+        );
+
+      expect(result).toEqual({
+        duration_ms: 500,
+      });
     });
   });
 });
 ```
 
-Notice this is different from the Jest version:
-
-```typescript
-jest.SpyInstance
-```
-
-We don't need that anymore.
-
 ---
 
-# 5. Add a test script
+# 6. Run the tests
 
-In `package.json`:
-
-```json
-{
-  "scripts": {
-    "test": "vitest",
-    "test:run": "vitest run"
-  }
-}
-```
-
-Then run:
+Run once:
 
 ```bash
 npm test
 ```
 
-For a one-time test run:
+Or:
 
 ```bash
 npm run test:run
 ```
 
-Or specifically:
+For development, I prefer:
 
 ```bash
-npx vitest run LoggerService.test.ts
+npm test
+```
+
+because Vitest stays running and reruns tests whenever you change the code.
+
+You should see something like:
+
+```text
+✓ src/services/LoggerService.test.ts
+✓ src/utils/loggingHelpers.test.ts
+
+Test Files  2 passed (2)
+Tests       40 passed (40)
 ```
 
 ---
 
-# 6. Recommended project structure
+# 7. One important issue in your current implementation
 
-I'd organize your logging code like this:
+There is a subtle problem in:
 
-```text
-src/
-└── services/
-    └── logging/
-        ├── LoggerService.ts
-        ├── LoggerService.test.ts
-        ├── events.ts
-        ├── events.test.ts
-        ├── loggingHelpers.ts
-        ├── loggingHelpers.test.ts
-        └── index.ts
+```ts
+getErrorInfo(error: unknown)
+```
+
+You have:
+
+```ts
+if (!error) {
+  return {};
+}
+```
+
+This means these values:
+
+```ts
+false
+0
+""
+null
+undefined
+```
+
+are all treated as "no error".
+
+For logging, I would actually change this to:
+
+```ts
+export function getErrorInfo(
+  error: unknown
+): LogAttributes {
+
+  if (error === null || error === undefined) {
+    return {};
+  }
+
+  if (error instanceof Error) {
+    return {
+      error_name: error.name,
+      error_message: error.message,
+      error_stack: error.stack,
+    };
+  }
+
+  if (typeof error === "string") {
+    return {
+      error_message: error,
+    };
+  }
+
+  return {
+    error,
+  };
+}
 ```
 
 Then:
 
-```typescript
-import {
-  logger,
-  ev,
-  getFilterInfo,
-} from "./services/logging";
+```ts
+getErrorInfo(false)
 ```
 
-This fits nicely with the architecture we designed.
+produces:
+
+```ts
+{
+  error: false
+}
+```
+
+and:
+
+```ts
+getErrorInfo(0)
+```
+
+produces:
+
+```ts
+{
+  error: 0
+}
+```
+
+That's generally more correct for a logging utility because **any value passed as an error should not silently disappear**.
 
 ---
 
-## One more recommendation
+# 8. I would add one more important test
 
-Since you're using Vite, **I would use Vitest for this project rather than Jest**.
+Because this is a structured logging system, I would test the **schema itself**.
 
-Your stack becomes:
+For example:
 
-```text
-React
-  │
-  ├── Vite
-  │
-  └── Vitest
-       │
-       ├── LoggerService.test.ts
-       ├── events.test.ts
-       └── loggingHelpers.test.ts
+```ts
+it("creates a valid structured log entry", () => {
+  const logger = new LoggerService({
+    service: "sda-query-builder",
+    application: "SDA",
+    environment: "qa",
+    host: "qa.stemx365.org",
+    schemaVersion: 1,
+    consoleEnabled: true,
+    minLevel: "debug",
+  });
+
+  const infoSpy = vi
+    .spyOn(console, "info")
+    .mockImplementation(() => {});
+
+  logger.info(
+    "filter.options.fetch.started",
+    "Fetching filter options",
+    "trace-123",
+    {
+      filter_id: 42,
+    }
+  );
+
+  const entry = JSON.parse(
+    infoSpy.mock.calls[0][0]
+  );
+
+  expect(entry).toMatchObject({
+    level: "info",
+    event: "filter.options.fetch.started",
+    service: "sda-query-builder",
+    application: "SDA",
+    environment: "qa",
+    host: "qa.stemx365.org",
+    session_id: expect.any(String),
+    trace_id: "trace-123",
+    schema_version: 1,
+    message: "Fetching filter options",
+    attrs: {
+      filter_id: 42,
+    },
+  });
+
+  expect(entry.ts).toEqual(
+    expect.any(String)
+  );
+
+  expect(
+    new Date(entry.ts).toString()
+  ).not.toBe("Invalid Date");
+});
 ```
 
-This avoids adding Jest/Babel transformation just to test your TypeScript logging service.
+This test is particularly valuable for your logger because the important thing isn't just **"console.info was called."**
 
+The important thing is that the application emits the expected structured event:
+
+```json
+{
+  "ts": "...",
+  "level": "info",
+  "event": "filter.options.fetch.started",
+  "service": "sda-query-builder",
+  "application": "SDA",
+  "environment": "qa",
+  "host": "qa.stemx365.org",
+  "session_id": "...",
+  "trace_id": "...",
+  "schema_version": 1,
+  "message": "Fetching filter options",
+  "attrs": {
+    "filter_id": 42
+  }
+}
+```
+
+That is the contract I'd want protected by your Vitest suite, especially if you later add a backend/log collector or Fluent Bit.
+
+### Recommended test coverage
+
+For these two files, I'd aim for:
+
+| Area           | Test                            |
+| -------------- | ------------------------------- |
+| Session        | generated                       |
+| Session        | remains stable                  |
+| Session        | `startSession()` creates new ID |
+| Trace          | generated                       |
+| Trace          | unique                          |
+| Debug          | emitted                         |
+| Info           | emitted                         |
+| Warning        | `console.warn`                  |
+| Error          | `console.error`                 |
+| Attributes     | preserved                       |
+| Message        | optional                        |
+| Trace ID       | optional                        |
+| Console        | enabled/disabled                |
+| Filtering      | debug                           |
+| Filtering      | info                            |
+| Filtering      | warning                         |
+| Filtering      | error                           |
+| Host           | browser hostname                |
+| Schema         | complete structured entry       |
+| `getLogInfo`   | component                       |
+| `getLogInfo`   | operation                       |
+| `getLogInfo`   | attributes                      |
+| `getErrorInfo` | `Error`                         |
+| `getErrorInfo` | `TypeError`                     |
+| `getErrorInfo` | string                          |
+| `getErrorInfo` | object                          |
+| `getErrorInfo` | null/undefined                  |
+| Performance    | duration                        |
+| Performance    | attributes                      |
+
+That gives you a solid unit-test foundation without testing private implementation details.
+
+Tighten the logger tests
+
+* Add schema validation
