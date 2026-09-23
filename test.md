@@ -1371,3 +1371,556 @@ That gives you a solid unit-test foundation without testing private implementati
 Tighten the logger tests
 
 * Add schema validation
+
+
+
+
+
+
+================README===================
+
+
+# LoggerService Usage Guide
+
+## 1. Overview
+
+`LoggerService` provides structured logging for the SDA Query Builder application.
+
+Instead of using:
+
+```ts
+console.log("Query started");
+```
+
+use:
+
+```ts
+logger.info("query.started", "Query started");
+```
+
+The logger produces structured JSON that can later be collected by systems such as Fluent Bit and centralized logging platforms.
+
+---
+
+## 2. Import the Logger
+
+Use the shared logger instance:
+
+```ts
+import logger from "./LoggerService";
+```
+
+Do **not** create a new `LoggerService` inside every component.
+
+---
+
+## 3. Log Levels
+
+The logger supports four levels:
+
+| Level     | Purpose                                        |
+| --------- | ---------------------------------------------- |
+| `debug`   | Detailed information useful during development |
+| `info`    | Normal application activity                    |
+| `warning` | Unexpected but recoverable conditions          |
+| `error`   | Failed operations or errors                    |
+
+Examples:
+
+```ts
+logger.debug("query.parameters", "Query parameters prepared");
+
+logger.info("query.started", "Query started");
+
+logger.warning("query.slow", "Query is taking longer than expected");
+
+logger.error("query.failed", "Query failed");
+```
+
+---
+
+## 4. Event Names
+
+The `event` should be a stable, machine-readable name.
+
+Use:
+
+```text
+query.started
+query.completed
+query.failed
+
+filter.created
+filter.updated
+filter.deleted
+
+cube_api.request.started
+cube_api.request.completed
+cube_api.request.failed
+```
+
+Avoid:
+
+```ts
+logger.info("Something happened");
+```
+
+The event should describe **what happened**, while `message` provides a human-readable description.
+
+---
+
+## 5. Additional Attributes
+
+Application-specific information should be placed in `attrs`.
+
+```ts
+logger.info(
+  "filter.created",
+  "Filter created",
+  undefined,
+  {
+    filter_id: 25,
+    filter_name: "Revenue",
+    filter_count: 3,
+  }
+);
+```
+
+This produces structured information that can later be searched or analyzed.
+
+---
+
+## 6. Trace IDs
+
+Use a trace ID when several log messages belong to the same operation.
+
+```ts
+const traceId = logger.newTraceId();
+
+logger.info(
+  "query.started",
+  "Query started",
+  traceId
+);
+
+logger.info(
+  "query.completed",
+  "Query completed",
+  traceId
+);
+```
+
+All logs for the operation will contain the same `trace_id`.
+
+This is especially useful for asynchronous operations such as API requests.
+
+---
+
+## 7. API Request Example
+
+A typical API operation should look like:
+
+```ts
+const traceId = logger.newTraceId();
+
+logger.info(
+  "cube_api.request.started",
+  "Starting Cube API request",
+  traceId,
+  {
+    endpoint: "/cube/load",
+  }
+);
+
+try {
+  const result = await loadCube();
+
+  logger.info(
+    "cube_api.request.completed",
+    "Cube API request completed",
+    traceId,
+    {
+      status: 200,
+    }
+  );
+
+  return result;
+} catch (error) {
+  logger.error(
+    "cube_api.request.failed",
+    "Cube API request failed",
+    traceId,
+    getErrorInfo(error)
+  );
+
+  throw error;
+}
+```
+
+---
+
+## 8. Error Logging
+
+Use `getErrorInfo()` from `loggingHelpers.ts`.
+
+```ts
+import { getErrorInfo } from "./loggingHelpers";
+```
+
+Example:
+
+```ts
+try {
+  await loadData();
+} catch (error) {
+  logger.error(
+    "data.load.failed",
+    "Failed to load data",
+    traceId,
+    getErrorInfo(error)
+  );
+}
+```
+
+For an `Error`, the logger can capture:
+
+```json
+{
+  "error_name": "TypeError",
+  "error_message": "Invalid value",
+  "error_stack": "..."
+}
+```
+
+---
+
+## 9. Component and Operation Information
+
+Use `getLogInfo()` when logging from a specific component.
+
+```ts
+import { getLogInfo } from "./loggingHelpers";
+
+logger.info(
+  "filter.load.started",
+  "Loading filters",
+  traceId,
+  getLogInfo("FilterPanel", "loadFilters")
+);
+```
+
+You can also add application-specific attributes:
+
+```ts
+logger.info(
+  "filter.load.completed",
+  "Filters loaded",
+  traceId,
+  getLogInfo(
+    "FilterPanel",
+    "loadFilters",
+    {
+      filter_count: 10,
+    }
+  )
+);
+```
+
+---
+
+## 10. Performance Logging
+
+Use `getPerformanceInfo()` to measure operation duration.
+
+```ts
+import { getPerformanceInfo } from "./loggingHelpers";
+
+const startTime = performance.now();
+
+await loadFilters();
+
+logger.info(
+  "filter.load.completed",
+  "Filters loaded",
+  traceId,
+  getPerformanceInfo(startTime, {
+    filter_count: 10,
+  })
+);
+```
+
+The resulting attributes include:
+
+```json
+{
+  "duration_ms": 125.42,
+  "filter_count": 10
+}
+```
+
+---
+
+## 11. Recommended Async Pattern
+
+For most important asynchronous operations, use this pattern:
+
+```ts
+const traceId = logger.newTraceId();
+const startTime = performance.now();
+
+logger.info(
+  "operation.started",
+  "Operation started",
+  traceId
+);
+
+try {
+  const result = await performOperation();
+
+  logger.info(
+    "operation.completed",
+    "Operation completed",
+    traceId,
+    getPerformanceInfo(startTime)
+  );
+
+  return result;
+} catch (error) {
+  logger.error(
+    "operation.failed",
+    "Operation failed",
+    traceId,
+    {
+      ...getPerformanceInfo(startTime),
+      ...getErrorInfo(error),
+    }
+  );
+
+  throw error;
+}
+```
+
+This provides:
+
+* Start event
+* Completion or failure event
+* Trace ID
+* Execution time
+* Error information
+
+---
+
+## 12. Session ID vs Trace ID
+
+The logger automatically creates a `session_id`.
+
+### Session ID
+
+Identifies the application session.
+
+```text
+session_id
+```
+
+It remains the same until:
+
+```ts
+logger.startSession();
+```
+
+is called.
+
+### Trace ID
+
+Identifies one particular operation.
+
+```ts
+const traceId = logger.newTraceId();
+```
+
+A session can contain many trace IDs.
+
+```text
+Session
+ ├── Trace: query execution
+ ├── Trace: filter loading
+ ├── Trace: Cube API request
+ └── Trace: export operation
+```
+
+---
+
+## 13. Structured Log Format
+
+A typical log entry looks like:
+
+```json
+{
+  "ts": "2026-09-23T12:00:00.000Z",
+  "level": "info",
+  "event": "query.completed",
+  "service": "sda-query-builder",
+  "application": "SDA",
+  "environment": "qa",
+  "host": "qa.stemx365.org",
+  "session_id": "sda-query-builder.20260923...",
+  "trace_id": "sda-query-builder....",
+  "schema_version": 1,
+  "message": "Query completed",
+  "attrs": {
+    "duration_ms": 125,
+    "row_count": 250
+  }
+}
+```
+
+The fixed fields provide consistency across the application. The `attrs` object contains operation-specific information.
+
+---
+
+## 14. What Should Be Logged
+
+Good examples:
+
+```ts
+logger.info("user.login.completed");
+
+logger.info("query.started");
+
+logger.info("query.completed", undefined, traceId, {
+  row_count: 250,
+});
+
+logger.warning("query.slow", "Query exceeded expected duration");
+
+logger.error("query.failed", "Query execution failed", traceId, {
+  ...getErrorInfo(error),
+});
+```
+
+---
+
+## 15. What Should Not Be Logged
+
+Do not log sensitive information:
+
+```ts
+// Do NOT do this
+logger.info("user.login", "User logged in", undefined, {
+  password: password,
+  token: accessToken,
+  api_key: apiKey,
+});
+```
+
+Instead log safe information:
+
+```ts
+logger.info("user.login.completed", "User login completed", undefined, {
+  authentication_method: "password",
+});
+```
+
+Never place passwords, authentication tokens, API keys, or secrets into log attributes.
+
+---
+
+## 16. Do Not Use Direct Console Logging
+
+Application code should generally use:
+
+```ts
+logger.info(...)
+logger.warning(...)
+logger.error(...)
+logger.debug(...)
+```
+
+instead of:
+
+```ts
+console.log(...)
+console.info(...)
+console.warn(...)
+console.error(...)
+```
+
+This keeps logging consistent and makes it possible to change the logging destination later without changing application code.
+
+---
+
+## 17. Environment and Log Levels
+
+The logger supports a minimum log level.
+
+For example:
+
+```ts
+minLevel: "debug"
+```
+
+allows all logs.
+
+```ts
+minLevel: "info"
+```
+
+ignores debug logs.
+
+A typical configuration can be:
+
+| Environment | Minimum Level |
+| ----------- | ------------- |
+| Development | `debug`       |
+| QA          | `debug`       |
+| Staging     | `info`        |
+| Production  | `info`        |
+
+The exact production configuration can be changed later without changing application logging calls.
+
+---
+
+## 18. Logging Architecture
+
+The current logger writes structured JSON to the browser console.
+
+The intended architecture is:
+
+```text
+SDA Query Builder
+        |
+        v
+  LoggerService
+        |
+        v
+ Structured JSON
+        |
+        v
+ Log Collector
+        |
+        v
+    Fluent Bit
+        |
+        v
+ Central Logging System
+```
+
+Because the application already produces structured JSON, the logging backend can be added later without redesigning how application code creates logs.
+
+---
+
+## 19. Main Rules
+
+When using `LoggerService`:
+
+1. Use the shared logger instance.
+2. Use stable event names.
+3. Use `message` for human-readable descriptions.
+4. Use `attrs` for additional structured information.
+5. Use a `trace_id` for multi-step operations.
+6. Use `getErrorInfo()` for errors.
+7. Use `getPerformanceInfo()` for timing.
+8. Do not log secrets or credentials.
+9. Avoid direct `console.log()` calls in application code.
+10. Keep the log structure consistent so it can be processed by future centralized logging systems.
+
