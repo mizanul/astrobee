@@ -38,6 +38,106 @@ If it ends correctly, you should see:
 
 `0a` is the newline character.
 
+
+
+
+---
+
+
+
+That warning is **not an error**. It means your `.gitlab-ci.yml` currently uses **Windows-style line endings (CRLF)**, and Git is configured to convert them to **Unix-style line endings (LF)**.
+
+For a GitLab CI file, **LF is the preferred format**.
+
+### Fix it permanently for this file
+
+Run:
+
+```bash
+sed -i '' 's/\r$//' .gitlab-ci.yml
+```
+
+Then check:
+
+```bash
+git add .gitlab-ci.yml
+```
+
+You should no longer get the CRLF warning.
+
+### Verify the line endings
+
+Run:
+
+```bash
+file .gitlab-ci.yml
+```
+
+You want something like:
+
+```text
+.gitlab-ci.yml: ASCII text
+```
+
+or:
+
+```text
+.gitlab-ci.yml: UTF-8 Unicode text
+```
+
+and **not** something mentioning `CRLF`.
+
+### Also configure Git on your Mac
+
+I recommend:
+
+```bash
+git config --global core.autocrlf input
+```
+
+This tells Git:
+
+* Keep files as **LF** in your repository
+* If you receive CRLF files, convert them to LF when committing
+* Don't unnecessarily convert LF files back to CRLF
+
+Then:
+
+```bash
+git add .gitlab-ci.yml
+git status
+```
+
+### One important point
+
+Earlier you saw:
+
+```text
+0a
+```
+
+That is **correct**. `0a` means LF/newline.
+
+The problem you're seeing now is that **some or all of the other lines contain `0d 0a`**, where:
+
+* `0d` = CR (carriage return)
+* `0a` = LF (newline)
+
+So the goal is to convert:
+
+```text
+CRLF = 0d 0a
+```
+
+to:
+
+```text
+LF = 0a
+```
+
+The `sed` command above does exactly that.
+
+
 ### Important
 
 If your GitLab pipeline is still failing after fixing this, **`No newline at end of file` is probably not the actual CI error**. It is usually just a Git diff warning.
