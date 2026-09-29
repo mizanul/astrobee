@@ -1,6 +1,68 @@
 python3 -c "p='.gitlab-ci.yml'; d=open(p,'rb').read(); open(p,'ab').write(b'\n' if d and not d.endswith(b'\n') else b'')"
 
 
+
+That's fine. You don't need Ruby or Python either.
+
+If you're on macOS, use the built-in `sed`/`tail` commands.
+
+### Fix `No newline at end of file`
+
+The simplest method is:
+
+```bash
+echo >> .gitlab-ci.yml
+```
+
+Then check:
+
+```bash
+git diff --check
+```
+
+If `git diff --check` produces **no output**, the whitespace/newline problem is clean.
+
+### If you want to see whether the file ends with a newline
+
+Run:
+
+```bash
+tail -c 1 .gitlab-ci.yml | od -An -t x1
+```
+
+If it ends correctly, you should see:
+
+```text
+0a
+```
+
+`0a` is the newline character.
+
+### Important
+
+If your GitLab pipeline is still failing after fixing this, **`No newline at end of file` is probably not the actual CI error**. It is usually just a Git diff warning.
+
+If you paste the **exact GitLab error message** and your `.gitlab-ci.yml`, I can tell you exactly what needs to be fixed.
+
+To check the actual CI problem
+
+* Open GitLab CI Lint
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 include:
   - project: 'some/project'
     file: '/some-template.yml'
