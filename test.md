@@ -1,4 +1,4 @@
-
+python3 -c "p='.gitlab-ci.yml'; d=open(p,'rb').read(); open(p,'ab').write(b'\n' if d and not d.endswith(b'\n') else b'')"
 
 
 include:
