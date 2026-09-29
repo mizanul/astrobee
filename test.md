@@ -1,3 +1,108 @@
+Since your `.gitlab-ci.yml` is including a shared pipeline template and your unit tests are under `web/`, the important question is **where the shared template defines the test job**.
+
+Your current file:
+
+```yaml
+include:
+  - project: "some url pipeline-template"
+    file:
+      - "templates/container.yml"
+
+variables:
+
+.sub_project_template:
+  parallel:
+    matrix:
+      - SUB_PROJECT_PATH: "web"
+```
+
+The `.sub_project_template` is a **hidden job/template configuration**. It doesn't actually run your unit tests by itself.
+
+### If `web` is a Node/React project
+
+If the shared `container.yml` already has a test job that uses `SUB_PROJECT_PATH`, you generally should **not create another job**. You need to configure the test command expected by that template.
+
+For example, if the template expects something like:
+
+```yaml
+npm test
+```
+
+then your `web/package.json` should contain:
+
+```json
+{
+  "scripts": {
+    "test": "vitest"
+  }
+}
+```
+
+and your tests can be under:
+
+```text
+web/
+├── package.json
+├── src/
+│   └── ...
+└── tests/
+    └── ...
+```
+
+or:
+
+```text
+web/
+├── package.json
+├── src/
+│   └── LoggerService.test.ts
+```
+
+depending on your Vitest configuration.
+
+### If you need to explicitly add a unit-test job
+
+You could add something like:
+
+```yaml
+unit_test:
+  parallel:
+    matrix:
+      - SUB_PROJECT_PATH: "web"
+  script:
+    - cd "$SUB_PROJECT_PATH"
+    - npm ci
+    - npm test
+```
+
+But **don't add this yet** if `templates/container.yml` already defines a test job. You may end up running the tests twice or conflicting with the shared template.
+
+### What I need to see
+
+Because your pipeline is coming from:
+
+```yaml
+include:
+  - project: "some url pipeline-template"
+    file:
+      - "templates/container.yml"
+```
+
+the answer depends on what is inside **`templates/container.yml`**.
+
+If you paste the contents of `templates/container.yml` (especially the jobs containing `test`, `unit`, `npm`, `script`, or `SUB_PROJECT_PATH`), I can tell you **exactly where to put your unit-test configuration** without changing the shared pipeline unnecessarily.
+
+Find the right place for the unit test
+
+* Show the shared template job
+
+
+
+
+
+
+
+
 python3 -c "p='.gitlab-ci.yml'; d=open(p,'rb').read(); open(p,'ab').write(b'\n' if d and not d.endswith(b'\n') else b'')"
 
 
