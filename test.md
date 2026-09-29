@@ -1,6 +1,10 @@
 
 
 
+include:
+  - project: 'some/project'
+    file: '/some-template.yml'
+
 stages:
   - test
 
@@ -13,10 +17,6 @@ vitest:
 
   script:
     - npm test
-
-
-
-
 
 
 
