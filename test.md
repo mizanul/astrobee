@@ -1,3 +1,27 @@
+
+
+
+stages:
+  - test
+
+vitest:
+  stage: test
+  image: node:20
+
+  before_script:
+    - npm ci
+
+  script:
+    - npm test
+
+
+
+
+
+
+
+
+
 I would test these as **two separate unit-test files**:
 
 * `LoggerService.test.ts` — test session IDs, trace IDs, log levels, filtering, log structure, console methods, browser host detection.
