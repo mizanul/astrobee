@@ -1,6 +1,120 @@
+It depends on your **Jest configuration**.
 
-Yes. Since `ev` is a nested object with many events, you can write a **recursive Jest test** that walks through the entire object and verifies every leaf event.
+### With the normal Jest setup
 
+You **do not need to import** `describe`, `test`, or `expect` if Jest's globals are enabled, which is the standard setup.
+
+So this works:
+
+```ts
+import { LoggerService } from "./LoggerService";
+
+describe("LoggerService", () => {
+  test("creates a session ID", () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+Jest provides these globally:
+
+```text
+describe
+test
+it
+expect
+beforeEach
+afterEach
+```
+
+### If you want explicit imports
+
+Jest also supports importing them:
+
+```ts
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  afterEach,
+} from "@jest/globals";
+
+import { LoggerService } from "./LoggerService";
+```
+
+Then:
+
+```ts
+describe("LoggerService", () => {
+  test("creates a session ID", () => {
+    expect(true).toBe(true);
+  });
+});
+```
+
+### What I recommend for your project
+
+Since you're using **TypeScript**, I recommend the explicit-import style:
+
+```ts
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  afterEach,
+} from "@jest/globals";
+```
+
+It makes the test dependencies clear and avoids TypeScript/editor issues with Jest globals.
+
+You will need:
+
+```bash
+npm install --save-dev jest @types/jest @jest/globals
+```
+
+If you're using `ts-jest`, also:
+
+```bash
+npm install --save-dev ts-jest
+```
+
+Then your LoggerService test can start with:
+
+```ts
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  afterEach,
+} from "@jest/globals";
+
+import { LoggerService } from "./LoggerService";
+```
+
+One important point: **`jest` itself** is also available globally in normal Jest tests, so `jest.spyOn()` works without importing it. If you want everything explicit, you can import `jest` too:
+
+```ts
+import {
+  describe,
+  test,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
+```
+
+For your project, I'd use this explicit style consistently in all three test files: `LoggerService.test.ts`, `loggingHelpers.test.ts`, and `event.test.ts`.
+
+For your Jest tests
+
+* Use explicit Jest imports
+
+---
 For example, if:
 
 ```js
