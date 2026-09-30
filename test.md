@@ -1,3 +1,13 @@
+npm install --save-dev jest ts-jest @types/jest @jest/globals
+
+module.exports = {
+  preset: "ts-jest",
+  testEnvironment: "jsdom",
+  clearMocks: true,
+  restoreMocks: true,
+};
+
+
 It depends on your **Jest configuration**.
 
 ### With the normal Jest setup
