@@ -1,5 +1,245 @@
 
+Yes. Since `ev` is a nested object with many events, you can write a **recursive Jest test** that walks through the entire object and verifies every leaf event.
 
+For example, if:
+
+```js
+export const ev = {
+  api: {
+    requestStarted: "api.request.started",
+    requestCompleted: "api.request.completed",
+    requestFailed: "api.request.failed",
+  },
+  query: {
+    started: "query.started",
+    completed: "query.completed",
+  },
+};
+```
+
+you can test everything with:
+
+```js
+import { ev } from "./event";
+
+describe("event definitions", () => {
+  function validateEvents(obj, path = "ev") {
+    Object.entries(obj).forEach(([key, value]) => {
+      const currentPath = `${path}.${key}`;
+
+      if (typeof value === "object" && value !== null) {
+        validateEvents(value, currentPath);
+      } else {
+        test(`${currentPath} is a valid event`, () => {
+          expect(typeof value).toBe("string");
+          expect(value.length).toBeGreaterThan(0);
+        });
+      }
+    });
+  }
+
+  validateEvents(ev);
+});
+```
+
+This automatically tests **every event**, no matter how many you add.
+
+### Better version
+
+I would make the validation a little stronger:
+
+```js
+import { ev } from "./event";
+
+describe("event definitions", () => {
+  function validateEvents(obj, path = "ev") {
+    Object.entries(obj).forEach(([key, value]) => {
+      const currentPath = `${path}.${key}`;
+
+      if (value && typeof value === "object") {
+        validateEvents(value, currentPath);
+        return;
+      }
+
+      test(`${currentPath} is a valid event`, () => {
+        expect(typeof value).toBe("string");
+        expect(value.trim().length).toBeGreaterThan(0);
+      });
+    });
+  }
+
+  validateEvents(ev);
+});
+```
+
+So if you later have:
+
+```js
+export const ev = {
+  api: {
+    query: {
+      started: "api.query.started",
+      completed: "api.query.completed",
+      failed: "api.query.failed",
+    },
+  },
+
+  ui: {
+    filter: {
+      created: "ui.filter.created",
+      deleted: "ui.filter.deleted",
+    },
+  },
+
+  authentication: {
+    login: "authentication.login",
+    logout: "authentication.logout",
+  },
+};
+```
+
+you don't need to change the test at all.
+
+It will automatically discover and test all **leaf values** in `ev`.
+
+### One additional test I recommend
+
+Since event names should be unique, you can also test for duplicates:
+
+```js
+import { ev } from "./event";
+
+describe("event definitions", () => {
+  function collectEvents(obj, events = []) {
+    Object.values(obj).forEach((value) => {
+      if (value && typeof value === "object") {
+        collectEvents(value, events);
+      } else {
+        events.push(value);
+      }
+    });
+
+    return events;
+  }
+
+  test("all event names are unique", () => {
+    const events = collectEvents(ev);
+
+    expect(new Set(events).size).toBe(events.length);
+  });
+
+  function validateEvents(obj, path = "ev") {
+    Object.entries(obj).forEach(([key, value]) => {
+      const currentPath = `${path}.${key}`;
+
+      if (value && typeof value === "object") {
+        validateEvents(value, currentPath);
+      } else {
+        test(`${currentPath} is a valid event`, () => {
+          expect(typeof value).toBe("string");
+          expect(value.trim()).not.toBe("");
+        });
+      }
+    });
+  }
+
+  validateEvents(ev);
+});
+```
+
+This gives you a useful **event contract test** without having to manually maintain a test for every event.
+
+Strengthen the event contract
+
+* Reject arrays and null values
+* Check event naming conventions
+
+
+---
+
+For example, if `event.js` is:
+
+```js
+export const ev = {
+  api: {
+    requestStarted: "api.request.started",
+    requestCompleted: "api.request.completed",
+    requestFailed: "api.request.failed",
+  },
+  query: {
+    started: "query.started",
+    completed: "query.completed",
+    failed: "query.failed",
+  },
+};
+```
+
+Create:
+
+```text
+event.test.js
+```
+
+```js
+import { ev } from "./event";
+
+describe("event definitions", () => {
+  test("exports ev", () => {
+    expect(ev).toBeDefined();
+    expect(typeof ev).toBe("object");
+  });
+
+  test("contains api events", () => {
+    expect(ev.api).toBeDefined();
+    expect(typeof ev.api).toBe("object");
+  });
+
+  test("contains expected API events", () => {
+    expect(ev.api.requestStarted).toBe("api.request.started");
+    expect(ev.api.requestCompleted).toBe("api.request.completed");
+    expect(ev.api.requestFailed).toBe("api.request.failed");
+  });
+
+  test("event names are strings", () => {
+    Object.values(ev.api).forEach((event) => {
+      expect(typeof event).toBe("string");
+      expect(event.length).toBeGreaterThan(0);
+    });
+  });
+});
+```
+
+### If your actual file is currently only
+
+```js
+export const ev = {
+  api: {}
+};
+```
+
+then the test can simply be:
+
+```js
+import { ev } from "./event";
+
+describe("event definitions", () => {
+  test("exports ev", () => {
+    expect(ev).toBeDefined();
+    expect(typeof ev).toBe("object");
+  });
+
+  test("contains api", () => {
+    expect(ev.api).toBeDefined();
+    expect(typeof ev.api).toBe("object");
+  });
+});
+```
+
+As you add events to `event.js`, I would recommend testing the **event names explicitly**, because these names become part of your logging contract.
+
+
+
+---
 
 Below are complete Jest test files for both `LoggerService` and `loggingHelpers`.
 
