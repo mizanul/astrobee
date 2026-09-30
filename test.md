@@ -1,7 +1,911 @@
 
 
 
-Yes. If your project uses **Jest**, the LoggerService tests should be written with Jest APIs instead of Vitest.
+Below are complete Jest test files for both `LoggerService` and `loggingHelpers`.
+
+I recommend these two files:
+
+```text
+src/services/LoggerService.test.ts
+src/utils/loggingHelpers.test.ts
+```
+
+## 1. `LoggerService.test.ts`
+
+```ts
+import { LoggerService } from "./LoggerService";
+
+describe("LoggerService", () => {
+  let logger: LoggerService;
+
+  beforeEach(() => {
+    logger = new LoggerService({
+      service: "test-service",
+      application: "TEST",
+      environment: "test",
+      host: "test.local",
+      schemaVersion: 1,
+      consoleEnabled: true,
+      minLevel: "debug",
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  // ============================================================
+  // CONSTRUCTOR
+  // ============================================================
+
+  describe("constructor", () => {
+    test("creates logger with supplied configuration", () => {
+      expect(logger.getSessionId()).toBeDefined();
+      expect(logger.getSessionId()).toContain("test-service");
+    });
+
+    test("uses default schema version when not provided", () => {
+      const testLogger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+      });
+
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      testLogger.info("test.event");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.schema_version).toBe(1);
+    });
+  });
+
+  // ============================================================
+  // SESSION
+  // ============================================================
+
+  describe("session", () => {
+    test("creates a session ID", () => {
+      const sessionId = logger.getSessionId();
+
+      expect(sessionId).toBeDefined();
+      expect(typeof sessionId).toBe("string");
+      expect(sessionId.length).toBeGreaterThan(0);
+      expect(sessionId).toContain("test-service");
+    });
+
+    test("returns the same session ID until session is restarted", () => {
+      const sessionId1 = logger.getSessionId();
+      const sessionId2 = logger.getSessionId();
+
+      expect(sessionId1).toBe(sessionId2);
+    });
+
+    test("startSession creates a new session ID", () => {
+      const oldSessionId = logger.getSessionId();
+
+      const newSessionId = logger.startSession();
+
+      expect(newSessionId).toBeDefined();
+      expect(newSessionId).not.toBe(oldSessionId);
+      expect(logger.getSessionId()).toBe(newSessionId);
+    });
+  });
+
+  // ============================================================
+  // TRACE ID
+  // ============================================================
+
+  describe("trace ID", () => {
+    test("creates a trace ID", () => {
+      const traceId = logger.newTraceId();
+
+      expect(traceId).toBeDefined();
+      expect(typeof traceId).toBe("string");
+      expect(traceId.length).toBeGreaterThan(0);
+    });
+
+    test("trace ID contains the session ID", () => {
+      const traceId = logger.newTraceId();
+
+      expect(traceId).toContain(logger.getSessionId());
+    });
+
+    test("creates unique trace IDs", () => {
+      const traceId1 = logger.newTraceId();
+      const traceId2 = logger.newTraceId();
+
+      expect(traceId1).not.toBe(traceId2);
+    });
+  });
+
+  // ============================================================
+  // DEBUG
+  // ============================================================
+
+  describe("debug", () => {
+    test("logs debug messages", () => {
+      const consoleSpy = jest
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      logger.debug(
+        "test.debug",
+        "Debug message"
+      );
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.level).toBe("debug");
+      expect(entry.event).toBe("test.debug");
+      expect(entry.message).toBe("Debug message");
+    });
+  });
+
+  // ============================================================
+  // INFO
+  // ============================================================
+
+  describe("info", () => {
+    test("logs info messages", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "query.completed",
+        "Query completed"
+      );
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.level).toBe("info");
+      expect(entry.event).toBe("query.completed");
+      expect(entry.message).toBe("Query completed");
+    });
+
+    test("logs attributes", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "query.completed",
+        "Query completed",
+        undefined,
+        {
+          row_count: 100,
+          duration_ms: 250,
+        }
+      );
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.attrs).toEqual({
+        row_count: 100,
+        duration_ms: 250,
+      });
+    });
+  });
+
+  // ============================================================
+  // WARNING
+  // ============================================================
+
+  describe("warning", () => {
+    test("logs warning messages", () => {
+      const consoleSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      logger.warning(
+        "query.slow",
+        "Query is slow"
+      );
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.level).toBe("warning");
+      expect(entry.event).toBe("query.slow");
+      expect(entry.message).toBe("Query is slow");
+    });
+  });
+
+  // ============================================================
+  // ERROR
+  // ============================================================
+
+  describe("error", () => {
+    test("logs error messages", () => {
+      const consoleSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      logger.error(
+        "query.failed",
+        "Query failed"
+      );
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.level).toBe("error");
+      expect(entry.event).toBe("query.failed");
+      expect(entry.message).toBe("Query failed");
+    });
+  });
+
+  // ============================================================
+  // TRACE ID IN LOG
+  // ============================================================
+
+  describe("trace ID in log entry", () => {
+    test("includes trace_id when provided", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const traceId = logger.newTraceId();
+
+      logger.info(
+        "query.started",
+        "Query started",
+        traceId
+      );
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.trace_id).toBe(traceId);
+    });
+
+    test("does not include trace_id when not provided", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("query.started");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry).not.toHaveProperty("trace_id");
+    });
+  });
+
+  // ============================================================
+  // MESSAGE
+  // ============================================================
+
+  describe("message", () => {
+    test("includes message when provided", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "test.event",
+        "Test message"
+      );
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.message).toBe("Test message");
+    });
+
+    test("does not include message when undefined", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry).not.toHaveProperty("message");
+    });
+  });
+
+  // ============================================================
+  // STRUCTURED LOG FIELDS
+  // ============================================================
+
+  describe("structured log entry", () => {
+    test("contains all required fields", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const traceId = logger.newTraceId();
+
+      logger.info(
+        "query.completed",
+        "Query completed",
+        traceId,
+        {
+          row_count: 50,
+        }
+      );
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry).toEqual(
+        expect.objectContaining({
+          level: "info",
+          event: "query.completed",
+          service: "test-service",
+          application: "TEST",
+          environment: "test",
+          host: "test.local",
+          session_id: logger.getSessionId(),
+          trace_id: traceId,
+          schema_version: 1,
+          message: "Query completed",
+          attrs: {
+            row_count: 50,
+          },
+        })
+      );
+
+      expect(entry.ts).toBeDefined();
+    });
+
+    test("timestamp is a valid ISO timestamp", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.ts).toBeDefined();
+
+      const date = new Date(entry.ts);
+
+      expect(date.toString()).not.toBe("Invalid Date");
+    });
+  });
+
+  // ============================================================
+  // CONSOLE ENABLED
+  // ============================================================
+
+  describe("consoleEnabled", () => {
+    test("writes to console when enabled", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("does not write to console when disabled", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        consoleEnabled: false,
+      });
+
+      testLogger.info("test.event");
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // MINIMUM LOG LEVEL
+  // ============================================================
+
+  describe("minimum log level", () => {
+    test("debug level allows all log levels", () => {
+      const debugSpy = jest
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "debug",
+      });
+
+      testLogger.debug("debug.event");
+
+      expect(debugSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("info level filters debug messages", () => {
+      const debugSpy = jest
+        .spyOn(console, "debug")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "info",
+      });
+
+      testLogger.debug("debug.event");
+
+      expect(debugSpy).not.toHaveBeenCalled();
+    });
+
+    test("info level allows info messages", () => {
+      const infoSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "info",
+      });
+
+      testLogger.info("info.event");
+
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("warning level filters info messages", () => {
+      const infoSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "warning",
+      });
+
+      testLogger.info("info.event");
+
+      expect(infoSpy).not.toHaveBeenCalled();
+    });
+
+    test("warning level allows warning messages", () => {
+      const warningSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "warning",
+      });
+
+      testLogger.warning("warning.event");
+
+      expect(warningSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("error level filters warning messages", () => {
+      const warningSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "error",
+      });
+
+      testLogger.warning("warning.event");
+
+      expect(warningSpy).not.toHaveBeenCalled();
+    });
+
+    test("error level allows error messages", () => {
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test",
+        application: "TEST",
+        environment: "test",
+        minLevel: "error",
+      });
+
+      testLogger.error("error.event");
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ============================================================
+  // HOST
+  // ============================================================
+
+  describe("host", () => {
+    test("uses configured host", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+        host: "qa.example.com",
+      });
+
+      testLogger.info("test.event");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.host).toBe("qa.example.com");
+    });
+
+    test("uses browser hostname when host is not provided", () => {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: {
+          hostname: "localhost",
+        },
+      });
+
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      const testLogger = new LoggerService({
+        service: "test-service",
+        application: "TEST",
+        environment: "test",
+      });
+
+      testLogger.info("test.event");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.host).toBe("localhost");
+    });
+  });
+
+  // ============================================================
+  // ATTRIBUTES
+  // ============================================================
+
+  describe("attributes", () => {
+    test("supports multiple attribute types", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "test.event",
+        undefined,
+        undefined,
+        {
+          string_value: "hello",
+          number_value: 123,
+          boolean_value: true,
+          null_value: null,
+          object_value: {
+            id: 1,
+          },
+          array_value: [1, 2, 3],
+        }
+      );
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.attrs.string_value).toBe("hello");
+      expect(entry.attrs.number_value).toBe(123);
+      expect(entry.attrs.boolean_value).toBe(true);
+      expect(entry.attrs.null_value).toBeNull();
+      expect(entry.attrs.object_value).toEqual({
+        id: 1,
+      });
+      expect(entry.attrs.array_value).toEqual([1, 2, 3]);
+    });
+
+    test("uses empty object when attributes are not provided", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info("test.event");
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.attrs).toEqual({});
+    });
+  });
+});
+```
+
+## 2. `loggingHelpers.test.ts`
+
+```ts
+import {
+  getLogInfo,
+  getErrorInfo,
+  getPerformanceInfo,
+} from "./loggingHelpers";
+
+describe("loggingHelpers", () => {
+  // ============================================================
+  // getLogInfo
+  // ============================================================
+
+  describe("getLogInfo", () => {
+    test("returns component", () => {
+      const result = getLogInfo("FilterPanel");
+
+      expect(result).toEqual({
+        component: "FilterPanel",
+      });
+    });
+
+    test("returns component and operation", () => {
+      const result = getLogInfo(
+        "FilterPanel",
+        "loadFilters"
+      );
+
+      expect(result).toEqual({
+        component: "FilterPanel",
+        operation: "loadFilters",
+      });
+    });
+
+    test("includes additional attributes", () => {
+      const result = getLogInfo(
+        "FilterPanel",
+        "loadFilters",
+        {
+          filter_count: 10,
+          source: "api",
+        }
+      );
+
+      expect(result).toEqual({
+        component: "FilterPanel",
+        operation: "loadFilters",
+        filter_count: 10,
+        source: "api",
+      });
+    });
+
+    test("does not include operation when undefined", () => {
+      const result = getLogInfo(
+        "FilterPanel",
+        undefined,
+        {
+          filter_count: 10,
+        }
+      );
+
+      expect(result).toEqual({
+        component: "FilterPanel",
+        filter_count: 10,
+      });
+    });
+
+    test("works with empty attributes", () => {
+      const result = getLogInfo(
+        "FilterPanel",
+        "loadFilters",
+        {}
+      );
+
+      expect(result).toEqual({
+        component: "FilterPanel",
+        operation: "loadFilters",
+      });
+    });
+  });
+
+  // ============================================================
+  // getErrorInfo
+  // ============================================================
+
+  describe("getErrorInfo", () => {
+    test("returns empty object for null", () => {
+      expect(getErrorInfo(null)).toEqual({});
+    });
+
+    test("returns empty object for undefined", () => {
+      expect(getErrorInfo(undefined)).toEqual({});
+    });
+
+    test("extracts information from Error", () => {
+      const error = new Error("Something went wrong");
+
+      const result = getErrorInfo(error);
+
+      expect(result.error_name).toBe("Error");
+      expect(result.error_message).toBe(
+        "Something went wrong"
+      );
+      expect(result.error_stack).toBeDefined();
+    });
+
+    test("extracts information from TypeError", () => {
+      const error = new TypeError("Invalid value");
+
+      const result = getErrorInfo(error);
+
+      expect(result.error_name).toBe("TypeError");
+      expect(result.error_message).toBe("Invalid value");
+      expect(result.error_stack).toBeDefined();
+    });
+
+    test("handles string errors", () => {
+      const result = getErrorInfo("Something failed");
+
+      expect(result).toEqual({
+        error_message: "Something failed",
+      });
+    });
+
+    test("handles object errors", () => {
+      const error = {
+        code: "ERR_001",
+        reason: "Invalid request",
+      };
+
+      const result = getErrorInfo(error);
+
+      expect(result).toEqual({
+        error,
+      });
+    });
+
+    test("handles numeric errors", () => {
+      const result = getErrorInfo(123);
+
+      expect(result).toEqual({
+        error: 123,
+      });
+    });
+
+    test("handles boolean errors", () => {
+      const result = getErrorInfo(true);
+
+      expect(result).toEqual({
+        error: true,
+      });
+    });
+  });
+
+  // ============================================================
+  // getPerformanceInfo
+  // ============================================================
+
+  describe("getPerformanceInfo", () => {
+    test("returns duration", () => {
+      const startTime = performance.now();
+
+      const result = getPerformanceInfo(startTime);
+
+      expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+    });
+
+    test("returns duration as a number", () => {
+      const startTime = performance.now();
+
+      const result = getPerformanceInfo(startTime);
+
+      expect(typeof result.duration_ms).toBe("number");
+    });
+
+    test("includes additional attributes", () => {
+      const startTime = performance.now();
+
+      const result = getPerformanceInfo(
+        startTime,
+        {
+          operation: "loadFilters",
+          item_count: 20,
+        }
+      );
+
+      expect(result.operation).toBe("loadFilters");
+      expect(result.item_count).toBe(20);
+      expect(typeof result.duration_ms).toBe("number");
+    });
+
+    test("works with empty attributes", () => {
+      const startTime = performance.now();
+
+      const result = getPerformanceInfo(
+        startTime,
+        {}
+      );
+
+      expect(result.duration_ms).toBeGreaterThanOrEqual(0);
+    });
+
+    test("calculates elapsed time", () => {
+      const startTime = performance.now() - 100;
+
+      const result = getPerformanceInfo(startTime);
+
+      expect(result.duration_ms).toBeGreaterThanOrEqual(100);
+    });
+  });
+});
+```
+
+### One important change to `loggingHelpers.ts`
+
+Your current code has:
+
+```ts
+if (!error) {
+  return {};
+}
+```
+
+That means `false`, `0`, and `""` are discarded. I recommend changing it to:
+
+```ts
+if (error === null || error === undefined) {
+  return {};
+}
+```
+
+So this test:
+
+```ts
+test("handles numeric errors", () => {
+  const result = getErrorInfo(123);
+
+  expect(result).toEqual({
+    error: 123,
+  });
+});
+```
+
+and the boolean test correctly verify that non-null values are preserved.
+
+Also make sure `LoggerService` is exported:
+
+```ts
+export class LoggerService {
+```
+
+while keeping:
+
+```ts
+export default logger;
+```
+
+These tests are designed around the **actual public behavior** of your logger rather than its private methods, which is the right approach for this service.
+
+For the Jest tests
+
+* Add Jest mocks for logging helpers
+
+
+
+
+---
+
+
 
 ### 1. Install Jest
 
