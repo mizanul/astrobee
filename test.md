@@ -1,3 +1,133 @@
+
+Yes. You now have the opposite configuration problem: your test contains ES module syntax:
+
+```ts
+import { LoggerService } from "./LoggerService";
+```
+
+but Jest is currently executing the test as CommonJS.
+
+Since your project appears to be a **Vite + TypeScript + React** application, I would use Jest with `ts-jest` and configure it explicitly for your setup.
+
+### Option 1: simplest setup
+
+Use `jest.config.cjs`:
+
+```js
+module.exports = {
+  preset: "ts-jest",
+  testEnvironment: "jsdom",
+  clearMocks: true,
+  restoreMocks: true,
+};
+```
+
+Then make sure your `tsconfig.json` has a CommonJS-compatible module setting for Jest. **Do not change your main Vite TypeScript configuration if your application depends on ES modules.**
+
+Instead create:
+
+### `tsconfig.jest.json`
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "esModuleInterop": true
+  }
+}
+```
+
+Then change `jest.config.cjs` to:
+
+```js
+module.exports = {
+  preset: "ts-jest",
+  testEnvironment: "jsdom",
+  clearMocks: true,
+  restoreMocks: true,
+  globals: {
+    "ts-jest": {
+      tsconfig: "tsconfig.jest.json"
+    }
+  }
+};
+```
+
+Your test can remain:
+
+```ts
+import { LoggerService } from "./LoggerService";
+
+describe("LoggerService", () => {
+  test("creates a session ID", () => {
+    const logger = new LoggerService({
+      service: "test",
+      application: "TEST",
+      environment: "test"
+    });
+
+    expect(logger.getSessionId()).toBeDefined();
+  });
+});
+```
+
+### One more important issue for your LoggerService
+
+Your production code contains:
+
+```ts
+import.meta.env?.MODE
+```
+
+Jest/CommonJS does not provide Vite's `import.meta.env`.
+
+So the default singleton at the bottom of `LoggerService.ts` can cause another Jest error.
+
+I recommend changing:
+
+```ts
+environment: import.meta.env?.MODE ?? "development",
+```
+
+to something Jest/Vite-safe, or separating the environment configuration from the logger.
+
+For example:
+
+```ts
+environment:
+  typeof import.meta !== "undefined" &&
+  import.meta.env?.MODE
+    ? import.meta.env.MODE
+    : "development",
+```
+
+However, depending on your TypeScript/Vite configuration, `import.meta` itself can still cause compilation issues under CommonJS.
+
+**The cleaner solution is to make the environment an explicit configuration value**:
+
+```ts
+const logger = new LoggerService({
+  service: "sda-query-builder",
+  application: "SDA",
+  environment: "development",
+  schemaVersion: 1,
+  consoleEnabled: true,
+  minLevel: "debug",
+});
+```
+
+For your unit tests, you're already creating `LoggerService` directly, so this avoids the Vite environment dependency.
+
+If you show me your **`package.json` and `tsconfig.json`**, I can give you the exact Jest configuration for your project rather than having you try several configurations.
+
+
+
+
+
+
+
+
 npm install --save-dev jest ts-jest @types/jest @jest/globals
 
 module.exports = {
