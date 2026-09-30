@@ -1,4 +1,132 @@
 
+Yes. **Jest can run as an ES module**, and for your Vite/React project that is a reasonable approach. The catch is that `import.meta.env` is a **Vite feature**, so making Jest ESM does not automatically provide `import.meta.env`.
+
+If you want to keep your source code unchanged, I would use Jest's ESM mode.
+
+### 1. `jest.config.mjs`
+
+Use an ESM Jest configuration:
+
+```js
+export default {
+  preset: "ts-jest/presets/default-esm",
+  testEnvironment: "jsdom",
+
+  clearMocks: true,
+  restoreMocks: true,
+
+  extensionsToTreatAsEsm: [".ts", ".tsx"],
+
+  transform: {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        useESM: true,
+        tsconfig: "./tsconfig.jest.json"
+      }
+    ]
+  }
+};
+```
+
+### 2. `tsconfig.jest.json`
+
+```json
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ES2020"
+  }
+}
+```
+
+### 3. Run Jest with Node's VM module support
+
+Your `package.json`:
+
+```json
+{
+  "scripts": {
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+  }
+}
+```
+
+On Windows, that environment-variable syntax is different, so use `cross-env`:
+
+```bash
+npm install --save-dev cross-env
+```
+
+and:
+
+```json
+{
+  "scripts": {
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest"
+  }
+}
+```
+
+### But there is still one problem
+
+Your logger contains:
+
+```ts
+environment: import.meta.env?.MODE ?? "development",
+```
+
+Jest ESM understands:
+
+```ts
+import.meta
+```
+
+but **Jest does not automatically create Vite's `import.meta.env`**.
+
+So this:
+
+```ts
+import.meta.env.MODE
+```
+
+can still fail.
+
+For your project, you have two choices:
+
+**Option A: Keep `import.meta.env`**
+
+Create a Jest setup/mocking solution for the Vite environment.
+
+**Option B: Separate Vite configuration from `LoggerService`**
+
+This is what I would normally do for a reusable logging service:
+
+```ts
+const logger = new LoggerService({
+  service: "sda-query-builder",
+  application: "SDA",
+  environment: "development",
+  schemaVersion: 1,
+  consoleEnabled: true,
+  minLevel: "debug",
+});
+```
+
+Then the application can provide the actual Vite environment when it initializes the logger.
+
+### For your situation
+
+Since you specifically want to test the **existing Vite application with Jest**, I would first try the ESM setup above rather than converting your Jest tests to CommonJS.
+
+If you show me your current **`package.json`**, **`tsconfig.json`**, and **`jest.config.*`**, I can give you the exact ESM configuration and handle `import.meta.env` without changing your `LoggerService` unnecessarily.
+
+
+
+---
+
+
 Yes. You now have the opposite configuration problem: your test contains ES module syntax:
 
 ```ts
