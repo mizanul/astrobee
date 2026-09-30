@@ -1,3 +1,274 @@
+
+
+
+Yes. If your project uses **Jest**, the LoggerService tests should be written with Jest APIs instead of Vitest.
+
+### 1. Install Jest
+
+For a TypeScript/Vite project, a common setup is:
+
+```bash
+npm install --save-dev jest ts-jest @types/jest jest-environment-jsdom
+```
+
+If you use Babel or another TypeScript transform, the configuration can be different.
+
+### 2. Export `LoggerService`
+
+In `LoggerService.ts`, change:
+
+```ts
+class LoggerService {
+```
+
+to:
+
+```ts
+export class LoggerService {
+```
+
+Keep the default singleton at the bottom:
+
+```ts
+export default logger;
+```
+
+### 3. Jest Configuration
+
+Create `jest.config.js`:
+
+```js
+module.exports = {
+  preset: "ts-jest",
+  testEnvironment: "jsdom",
+  clearMocks: true,
+  restoreMocks: true,
+};
+```
+
+### 4. Package Scripts
+
+In `package.json`:
+
+```json
+{
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  }
+}
+```
+
+### 5. LoggerService Test
+
+For example:
+
+```ts
+import { LoggerService } from "./LoggerService";
+
+describe("LoggerService", () => {
+  let logger: LoggerService;
+
+  beforeEach(() => {
+    logger = new LoggerService({
+      service: "test-service",
+      application: "TEST",
+      environment: "test",
+      host: "test.local",
+      consoleEnabled: true,
+      minLevel: "debug",
+    });
+  });
+
+  describe("session", () => {
+    test("creates a session ID", () => {
+      const sessionId = logger.getSessionId();
+
+      expect(sessionId).toBeDefined();
+      expect(sessionId).toContain("test-service");
+    });
+
+    test("creates a new session when startSession is called", () => {
+      const oldSessionId = logger.getSessionId();
+
+      const newSessionId = logger.startSession();
+
+      expect(newSessionId).toBeDefined();
+      expect(newSessionId).not.toBe(oldSessionId);
+      expect(logger.getSessionId()).toBe(newSessionId);
+    });
+  });
+
+  describe("trace ID", () => {
+    test("creates a trace ID", () => {
+      const traceId = logger.newTraceId();
+
+      expect(traceId).toBeDefined();
+      expect(traceId).toContain(logger.getSessionId());
+    });
+
+    test("creates unique trace IDs", () => {
+      const trace1 = logger.newTraceId();
+      const trace2 = logger.newTraceId();
+
+      expect(trace1).not.toBe(trace2);
+    });
+  });
+
+  describe("logging", () => {
+    test("logs an info message", () => {
+      const consoleSpy = jest
+        .spyOn(console, "info")
+        .mockImplementation(() => {});
+
+      logger.info(
+        "query.completed",
+        "Query completed",
+        "trace-123",
+        {
+          row_count: 10,
+        }
+      );
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.level).toBe("info");
+      expect(entry.event).toBe("query.completed");
+      expect(entry.message).toBe("Query completed");
+      expect(entry.trace_id).toBe("trace-123");
+      expect(entry.service).toBe("test-service");
+      expect(entry.application).toBe("TEST");
+      expect(entry.environment).toBe("test");
+      expect(entry.host).toBe("test.local");
+      expect(entry.schema_version).toBe(1);
+      expect(entry.attrs.row_count).toBe(10);
+    });
+
+    test("logs errors using console.error", () => {
+      const consoleSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      logger.error(
+        "query.failed",
+        "Query failed"
+      );
+
+      expect(consoleSpy).toHaveBeenCalledTimes(1);
+
+      const entry = JSON.parse(consoleSpy.mock.calls[0][0]);
+
+      expect(entry.level).toBe("error");
+      expect(entry.event).toBe("query.failed");
+      expect(entry.message).toBe("Query failed");
+    });
+  });
+});
+```
+
+### 6. Testing Minimum Log Level
+
+This is particularly important for your logger:
+
+```ts
+test("does not log messages below the minimum level", () => {
+  const consoleSpy = jest
+    .spyOn(console, "debug")
+    .mockImplementation(() => {});
+
+  const logger = new LoggerService({
+    service: "test-service",
+    application: "TEST",
+    environment: "test",
+    consoleEnabled: true,
+    minLevel: "info",
+  });
+
+  logger.debug("debug.event");
+
+  expect(consoleSpy).not.toHaveBeenCalled();
+});
+```
+
+And:
+
+```ts
+test("logs messages at or above the minimum level", () => {
+  const consoleSpy = jest
+    .spyOn(console, "info")
+    .mockImplementation(() => {});
+
+  const logger = new LoggerService({
+    service: "test-service",
+    application: "TEST",
+    environment: "test",
+    consoleEnabled: true,
+    minLevel: "info",
+  });
+
+  logger.info("info.event");
+
+  expect(consoleSpy).toHaveBeenCalledTimes(1);
+});
+```
+
+### 7. Testing `consoleEnabled`
+
+```ts
+test("does not write to console when console logging is disabled", () => {
+  const consoleSpy = jest
+    .spyOn(console, "info")
+    .mockImplementation(() => {});
+
+  const logger = new LoggerService({
+    service: "test-service",
+    application: "TEST",
+    environment: "test",
+    consoleEnabled: false,
+  });
+
+  logger.info("test.event");
+
+  expect(consoleSpy).not.toHaveBeenCalled();
+});
+```
+
+### 8. Jest vs Vitest
+
+The main changes from the earlier tests are:
+
+| Vitest                 | Jest                     |
+| ---------------------- | ------------------------ |
+| `vi.spyOn()`           | `jest.spyOn()`           |
+| `vi.fn()`              | `jest.fn()`              |
+| `vi.mock()`            | `jest.mock()`            |
+| `vi.restoreAllMocks()` | `jest.restoreAllMocks()` |
+| `vi.clearAllMocks()`   | `jest.clearAllMocks()`   |
+| `vitest`               | `jest`                   |
+| `vitest run`           | `jest`                   |
+
+So your LoggerService design does **not** need to change just because you are using Jest. The tests need to use Jest's APIs and Jest needs to be configured for your TypeScript/browser environment.
+
+For the Jest setup
+
+* Add Jest mocks for the logger helpers
+
+
+
+
+
+
+
+
+---
+
+
+
+
+
 Since your `.gitlab-ci.yml` is including a shared pipeline template and your unit tests are under `web/`, the important question is **where the shared template defines the test job**.
 
 Your current file:
