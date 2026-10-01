@@ -1,4 +1,95 @@
 
+If this is **Cube.js YAML schema**, the error:
+
+```text
+pre_aggregation [object Object] not allowed
+```
+
+usually means the YAML structure for `pre_aggregations` is incorrect.
+
+For example, Cube expects something like:
+
+```yaml
+cubes:
+  - name: orders
+    sql_table: orders
+
+    measures:
+      - name: count
+        type: count
+
+    dimensions:
+      - name: status
+        sql: status
+        type: string
+
+    pre_aggregations:
+      - name: orders_rollup
+        type: rollup
+        measures:
+          - count
+        dimensions:
+          - status
+```
+
+### Important: YAML uses a list here
+
+Use:
+
+```yaml
+pre_aggregations:
+  - name: orders_rollup
+    type: rollup
+```
+
+**not:**
+
+```yaml
+pre_aggregations:
+  orders_rollup:
+    type: rollup
+```
+
+If you are using a YAML file and getting:
+
+```text
+[object Object] not allowed
+```
+
+there may also be a field such as:
+
+```yaml
+type:
+  value: rollup
+```
+
+when it needs to be:
+
+```yaml
+type: rollup
+```
+
+If you paste your **YAML `pre_aggregations` section** and the exact error, I can correct the YAML directly.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Yes. **Jest can run as an ES module**, and for your Vite/React project that is a reasonable approach. The catch is that `import.meta.env` is a **Vite feature**, so making Jest ESM does not automatically provide `import.meta.env`.
 
 If you want to keep your source code unchanged, I would use Jest's ESM mode.
