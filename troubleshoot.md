@@ -226,3 +226,61 @@ docker inspect 541c04e8_intball_krpc \
 Do not delete files directly from Docker's `overlay2` directory. We should identify the large files from inside the container first.
 
 One important distinction: your containers all showing `Up 35 minutes` is consistent with the VPS having been restarted. It does not establish that Int-Ball caused the restart. Let's find out whether its 14.6 GB consists of build files or something else before deciding what to clean up.
+
+
+
+
+
+
+---
+
+
+$Server   = "SQLPROD01"
+$Database = "SalesDB"
+$Query    = "SELECT * FROM dbo.Orders"
+$Output   = "C:\Export\Orders.csv"
+
+$ConnectionString = @"
+Server=$Server;
+Database=$Database;
+Integrated Security=True;
+TrustServerCertificate=True;
+"@
+
+$Connection = New-Object System.Data.SqlClient.SqlConnection(
+    $ConnectionString
+)
+
+try {
+    $Connection.Open()
+
+    $Command = $Connection.CreateCommand()
+    $Command.CommandText = $Query
+    $Reader = $Command.ExecuteReader()
+
+    # Export the result to CSV
+    $Rows = [System.Collections.Generic.List[object]]::new()
+
+    while ($Reader.Read()) {
+        $Row = [ordered]@{}
+
+        for ($i = 0; $i -lt $Reader.FieldCount; $i++) {
+            $Row[$Reader.GetName($i)] = if ($Reader.IsDBNull($i)) {
+                $null
+            } else {
+                $Reader.GetValue($i)
+            }
+        }
+
+        $Rows.Add([PSCustomObject]$Row)
+    }
+
+    $Rows | Export-Csv -Path $Output -NoTypeInformation -Encoding UTF8
+
+    $Reader.Close()
+}
+finally {
+    if ($Connection.State -ne 'Closed') {
+        $Connection.Close()
+    }
+}
