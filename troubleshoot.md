@@ -278,3 +278,58 @@ catch {
     Write-Error "Export failed: $($_.Exception.Message)"
     exit 1
 }
+
+
+---
+
+
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$Database,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Table,
+
+    [string]$Schema = "dbo",
+
+    [string]$ServerInstance = "YOUR_SERVER\YOUR_INSTANCE",
+
+    [string]$OutputDirectory = "C:\Export"
+)
+
+$OutputFile = Join-Path $OutputDirectory "$Table.csv"
+
+# Create output directory if needed
+if (!(Test-Path $OutputDirectory)) {
+    New-Item -ItemType Directory -Path $OutputDirectory -Force |
+        Out-Null
+}
+
+Import-Module SqlServer -ErrorAction Stop
+
+# Validate identifiers to prevent SQL injection
+foreach ($Name in @($Database, $Schema, $Table)) {
+    if ($Name -match '[\[\]]') {
+        throw "Database, schema, and table names cannot contain brackets."
+    }
+}
+
+$Query = "SELECT * FROM [$Schema].[$Table];"
+
+try {
+    Invoke-Sqlcmd `
+        -ServerInstance $ServerInstance `
+        -Database $Database `
+        -Query $Query `
+        -ErrorAction Stop |
+        Export-Csv `
+            -Path $OutputFile `
+            -NoTypeInformation `
+            -Encoding UTF8
+
+    Write-Host "Export completed: $OutputFile"
+}
+catch {
+    Write-Error "Export failed: $($_.Exception.Message)"
+    exit 1
+}
