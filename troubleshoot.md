@@ -234,53 +234,47 @@ One important distinction: your containers all showing `Up 35 minutes` is consis
 
 ---
 
+# SQL Server connection settings
+$ServerInstance = "YOUR_SERVER\YOUR_INSTANCE"
+$Database       = "YourDatabase"
+$Schema         = "dbo"
+$Table          = "YourTable"
 
-$Server   = "SQLPROD01"
-$Database = "SalesDB"
-$Query    = "SELECT * FROM dbo.Orders"
-$Output   = "C:\Export\Orders.csv"
+# CSV output file
+$OutputFile = "C:\Export\$Table.csv"
 
-$ConnectionString = @"
-Server=$Server;
-Database=$Database;
-Integrated Security=True;
-TrustServerCertificate=True;
+# Create output directory if it does not exist
+$OutputDirectory = Split-Path $OutputFile
+if (!(Test-Path $OutputDirectory)) {
+    New-Item -ItemType Directory -Path $OutputDirectory -Force |
+        Out-Null
+}
+
+# Load the SqlServer PowerShell module
+Import-Module SqlServer -ErrorAction Stop
+
+# Build SQL query
+$Query = @"
+SELECT *
+FROM [$Schema].[$Table];
 "@
 
-$Connection = New-Object System.Data.SqlClient.SqlConnection(
-    $ConnectionString
-)
-
 try {
-    $Connection.Open()
+    Write-Host "Exporting [$Schema].[$Table] from $Database..."
 
-    $Command = $Connection.CreateCommand()
-    $Command.CommandText = $Query
-    $Reader = $Command.ExecuteReader()
+    Invoke-Sqlcmd `
+        -ServerInstance $ServerInstance `
+        -Database $Database `
+        -Query $Query `
+        -ErrorAction Stop |
+        Export-Csv -Path $OutputFile `
+                   -NoTypeInformation `
+                   -Encoding UTF8
 
-    # Export the result to CSV
-    $Rows = [System.Collections.Generic.List[object]]::new()
-
-    while ($Reader.Read()) {
-        $Row = [ordered]@{}
-
-        for ($i = 0; $i -lt $Reader.FieldCount; $i++) {
-            $Row[$Reader.GetName($i)] = if ($Reader.IsDBNull($i)) {
-                $null
-            } else {
-                $Reader.GetValue($i)
-            }
-        }
-
-        $Rows.Add([PSCustomObject]$Row)
-    }
-
-    $Rows | Export-Csv -Path $Output -NoTypeInformation -Encoding UTF8
-
-    $Reader.Close()
+    Write-Host "Export completed successfully."
+    Write-Host "Output file: $OutputFile"
 }
-finally {
-    if ($Connection.State -ne 'Closed') {
-        $Connection.Close()
-    }
+catch {
+    Write-Error "Export failed: $($_.Exception.Message)"
+    exit 1
 }
