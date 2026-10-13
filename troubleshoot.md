@@ -334,3 +334,107 @@ catch {
     exit 1
 }
 ```
+
+
+
+
+You can pass the database name and table name as command-line parameters to your PowerShell script.
+
+## 1. Modify the script to accept parameters
+
+Save this as `Export-SqlTableToCsv.ps1`.
+
+PowerShell
+
+```
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$Database,
+
+    [Parameter(Mandatory = $true)]
+    [string]$Table,
+
+    [string]$Schema = "dbo",
+
+    [string]$ServerInstance = "YOUR_SERVER\YOUR_INSTANCE",
+
+    [string]$OutputDirectory = "C:\Export"
+)
+
+$OutputFile = Join-Path $OutputDirectory "$Table.csv"
+
+# Create output directory if needed
+if (!(Test-Path $OutputDirectory)) {
+    New-Item -ItemType Directory -Path $OutputDirectory -Force |
+        Out-Null
+}
+
+Import-Module SqlServer -ErrorAction Stop
+
+# Validate identifiers to prevent SQL injection
+foreach ($Name in @($Database, $Schema, $Table)) {
+    if ($Name -match '[\[\]]') {
+        throw "Database, schema, and table names cannot contain brackets."
+    }
+}
+
+$Query = "SELECT * FROM [$Schema].[$Table];"
+
+try {
+    Invoke-Sqlcmd `
+        -ServerInstance $ServerInstance `
+        -Database $Database `
+        -Query $Query `
+        -ErrorAction Stop |
+        Export-Csv `
+            -Path $OutputFile `
+            -NoTypeInformation `
+            -Encoding UTF8
+
+    Write-Host "Export completed: $OutputFile"
+}
+catch {
+    Write-Error "Export failed: $($_.Exception.Message)"
+    exit 1
+}
+```
+
+## 2. Run the script with parameters
+
+Pass the database and table names like this:
+
+PowerShell
+
+```
+.\Export-SqlTableToCsv.ps1 `
+    -Database "SalesDB" `
+    -Table "Orders"
+```
+
+Specify a different server, schema, or output directory:
+
+PowerShell
+
+```
+.\Export-SqlTableToCsv.ps1 `
+    -ServerInstance "SQLPROD01" `
+    -Database "SalesDB" `
+    -Schema "dbo" `
+    -Table "Orders" `
+    -OutputDirectory "D:\CSVExports"
+```
+
+You can also run it on one line:
+
+PowerShell
+
+```
+.\Export-SqlTableToCsv.ps1 -Database "SalesDB" -Table "Orders"
+```
+
+## 3. Example output
+
+```
+Export completed: C:\Export\Orders.csv
+```
+
