@@ -233,7 +233,7 @@ One important distinction: your containers all showing `Up 35 minutes` is consis
 
 
 ---
-
+```
 # SQL Server connection settings
 $ServerInstance = "YOUR_SERVER\YOUR_INSTANCE"
 $Database       = "YourDatabase"
@@ -278,11 +278,11 @@ catch {
     Write-Error "Export failed: $($_.Exception.Message)"
     exit 1
 }
-
+```
 
 ---
 
-
+```
 param(
     [Parameter(Mandatory = $true)]
     [string]$Database,
@@ -333,3 +333,4 @@ catch {
     Write-Error "Export failed: $($_.Exception.Message)"
     exit 1
 }
+```
