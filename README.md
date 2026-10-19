@@ -525,20 +525,3 @@ This architecture scales well for enterprise applications because it centralizes
 
 ---
 
-
-Good morning, everyone!
-First, thank you, Greg, for inviting me to be part of this exciting program. It is a pleasure to join you and meet all the students participating in this design challenge.
-My name is Mizanul Chowdhury, and I am the founder and CEO of STEMX365. Our mission is to help students, especially those with limited opportunities, explore science, technology, engineering, and mathematics through hands-on learning and real-world challenges.
-At STEMX365, we help students participate in international space robotics programs, including MIT Zero Robotics, NASA Astrobee activities, and JAXA's Kibo Robot Programming Challenge. Our students from Bangladesh have achieved international recognition, and we are proud to help young people discover their potential through space technology.
-Today, I want to congratulate all of you for taking the initiative to participate in this design challenge. You should be proud of yourselves. You are choosing to learn something new, challenge your thinking, and work together to solve problems.
-Over the next five weeks, you will have the opportunity to turn your ideas into designs, test your solutions, learn from mistakes, and improve your work. These are the same skills engineers and scientists use every day.
-My advice is simple: Be curious, be creative, and never be afraid to fail. In science and engineering, failure is not the end. It is an opportunity to learn something new and make your next attempt better.
-Also, remember that great ideas do not come only from people who already know everything. They often come from people who ask questions, think differently, and are willing to try something new. Listen to your teammates, share your ideas, and help each other succeed.
-Space exploration teaches us that when people work together, we can accomplish things that once seemed impossible. The skills you develop through this challenge may help you solve important problems not only in space but also here on Earth.
-On behalf of STEMX365, I am excited to support this program, and I wish all of you the very best over the next five weeks.
-Enjoy the experience, believe in your ideas, and make the most of this opportunity.
-Keep exploring, keep creating, and keep reaching for the stars!
-
-				
-			
-			 			
